@@ -1,0 +1,5 @@
+# extract traffic coming from Netflix (i.e. source = 198.45.53.x)
+awk '$3 ~ "198.45.53"' myTrace > Netflix_trace
+
+
+awk '$3 ~ "203.5.76.205"' myTrace > Youtube_trace
