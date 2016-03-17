@@ -1,25 +1,13 @@
 import dpkt
 import datetime
 import socket
+from mHeader import mHeader
 
 import pickle
 
 
 mPocket = {}
 
-
-class mHeader:
-	def __init__(self,timestamp,sport,dport,length,win,ack,seq):
-		self.timestamp = timestamp
-		self.sport = sport
-		self.dport = dport
-		self.len = length
-		self.win = win
-		self.ack = ack
-		self.seq = seq
-
-	def getutcTimeStamp():
-		return str(datetime.datetime.utcfromtimestamp(self.timestamp))
 
 def mac_addr(mac_string):
 	"""Print out MAC address given a string

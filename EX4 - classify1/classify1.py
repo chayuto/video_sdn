@@ -1,21 +1,9 @@
 import dpkt
 import datetime
 import socket
+from mHeader import mHeader
 
 import pickle
-
-class mHeader:
-	def __init__(self,timestamp,sport,dport,length,win,ack,seq):
-		self.timestamp = timestamp
-		self.sport = sport
-		self.dport = dport
-		self.len = length
-		self.win = win
-		self.ack = ack
-		self.seq = seq
-
-	def getutcTimeStamp():
-		return str(datetime.datetime.utcfromtimestamp(self.timestamp))
 
 
 with open('data.pickle', 'rb') as f:
@@ -29,4 +17,20 @@ with open('data.pickle', 'rb') as f:
 		for dstIP in dstDict:
 			entryList = dstDict[dstIP]
 			print srcIP +':' +dstIP +":"+ str(len(entryList))
+
+			portList = {}
+			for entry in entryList:
+				keyString = "%d:%d" % (entry.sport,entry.dport)
+				if keyString not in portList:
+					portList[keyString] = entry.length
+				else:
+					oldLength = portList[keyString]
+					portList[keyString] = entry.length +oldLength
+
+			for stat in portList:
+				print "%s -> %d" % (stat , portList[stat])
+
+
+
+
 			
