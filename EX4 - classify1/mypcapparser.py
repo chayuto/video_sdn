@@ -92,30 +92,32 @@ for timestamp, buf in pcap:
 
 		ipsrc = ip_to_str(ip.src)
 		ipdst = ip_to_str(ip.dst)
+		dstKey = ipdst+":"+str(tcpdst)
+		srcKey = ipsrc+":"+str(tcpsrc)
 
-		if ipsrc not in mPocket:
-			print 'srcIP not match'
+		if srcKey not in mPocket:
+			print 'srcKey not match'
 			entryList = []
 			entryList.append(test1)
 			dstDict = {}#create new dstDict and store new header in a new list
-			dstDict[ipdst] = entryList
-			mPocket[ipsrc] = dstDict
+			dstDict[dstKey] = entryList
+			mPocket[srcKey] = dstDict
 			pass
 		else:
-			dstDict = mPocket[ipsrc]
-			if ipdst in dstDict:
-				print 'srcIP match, dstIP match'
+			dstDict = mPocket[srcKey]
+			if dstKey in dstDict:
+				print 'srcKey match, dstKey match'
 				#update entry list
-				entryList = dstDict[ipdst] 
+				entryList = dstDict[dstKey] 
 				entryList.append(test1)
-				dstDict[ipdst] = entryList
+				dstDict[dstKey] = entryList
 
 			else:
-				print 'srcIP match, no dstIP'
+				print 'srcKey match, no dstKey'
 				#create new entrylist
 				entryList = []
 				entryList.append(test1)
-				dstDict[ipdst] = entryList
+				dstDict[dstKey] = entryList
 
 		# size   = len(buf) 
 		# ip     = eth.data

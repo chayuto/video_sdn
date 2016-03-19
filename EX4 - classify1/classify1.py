@@ -12,13 +12,22 @@ with open('data.pickle', 'rb') as f:
 	data = pickle.load(f)
 	print len(data)
 
-	for srcIP in data:
-		dstDict = data[srcIP]
-		for dstIP in dstDict:
-			entryList = dstDict[dstIP]
-			print srcIP +':' +dstIP +":"+ str(len(entryList))
+	for srcKey in data:
+		dstDict = data[srcKey]
+		for dstKey in dstDict:
+			entryList = dstDict[dstKey]
 
+			totalByteCount = 0
+
+			for entry in entryList:
+				totalByteCount = totalByteCount + entry.length
+			
+
+			print srcKey +' -> ' +dstKey +" : "+ str(totalByteCount)
+			
+			'''
 			portList = {}
+			
 			for entry in entryList:
 				keyString = "%d:%d" % (entry.sport,entry.dport)
 				if keyString not in portList:
@@ -29,6 +38,7 @@ with open('data.pickle', 'rb') as f:
 
 			for stat in portList:
 				print "%s -> %d" % (stat , portList[stat])
+			'''
 
 
 
