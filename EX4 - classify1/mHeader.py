@@ -1,3 +1,4 @@
+import datetime
 class mHeader:
 	def __init__(self,timestamp,sport,dport,length,win,ack,seq):
 		self.timestamp = timestamp
@@ -7,5 +8,5 @@ class mHeader:
 		self.win = win
 		self.ack = ack
 		self.seq = seq
-	def getutcTimeStamp():
+	def getutcTimeStamp(self):
 		return str(datetime.datetime.utcfromtimestamp(self.timestamp))
