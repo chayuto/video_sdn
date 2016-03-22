@@ -59,8 +59,9 @@ with open('data.pickle', 'rb') as f:
 				print "Bytes: "+ str(totalByteCount)
 				packetCount = len(entryList)
 				print "Packet count: " + str(packetCount)
-				print "Avg Packet Size: " + str(totalByteCount/packetCount)
+				print "Packet Size Mean: " + str(totalByteCount/packetCount)
 				print "Packet Size SD: " + str(pstdev(packetSizeList))
+				print "Window Size Mean: " + str(mean(windowList))
 				print "Window Size SD: " + str(pstdev(windowList))
 				print "Avg Speed: " + str(totalByteCount*8/TimeLength)
 
