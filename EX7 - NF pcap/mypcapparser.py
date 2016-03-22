@@ -31,9 +31,9 @@ def ip_to_str(address):
 	return socket.inet_ntop(socket.AF_INET, address)
 
 
-fin  = open('low 2.pcap')
+fin  = open('autoNC.pcap')
 pcap = dpkt.pcap.Reader(fin)
-fout = open('low2Out.csv', 'a')
+fout = open('autoNCOut.csv', 'a')
 
 pkt_counter = 0
 
@@ -42,14 +42,13 @@ pkt_counter = 0
 servListRAW = tuple(open('./Netflix_AS2906', 'r'))
 networkList =[]
 for i in servListRAW:
-
 	#servList.append(i.strip()) #remove \n character at the end of the line
 	networkList.append(IPNetwork(i.strip()))
 
 for timestamp, buf in pcap:
 	# track number of packets
 	pkt_counter += 1
-	print "\npacket no = %s" % pkt_counter
+	
 
 	# Print out the timestamp in UTC
 	#print timestamp
@@ -85,6 +84,7 @@ for timestamp, buf in pcap:
 	# Pulling out src and dst ports
 	
 	if ip.p == 6:
+		
 		for network in networkList:
 			if IPAddress(ip_to_str(ip.src)) in network:
 				tcp    = ip.data
@@ -93,7 +93,6 @@ for timestamp, buf in pcap:
 				tcpwin = tcp.win
 				tcpack = tcp.ack
 				tcpseq = tcp.seq
-
 				#print("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s" %
 				#	(timestamp, ip_to_str(ip.src), tcpsrc, ip_to_str(ip.dst), tcpdst, ip.len,tcpwin,tcpack,tcpseq))
 				
@@ -102,7 +101,8 @@ for timestamp, buf in pcap:
 				
 				fout.write("%s,%s\n" %
 					(timestamp,  ip.len))
-
+				print "packet no = %s" % pkt_counter
+				print("%s" %(ip_to_str(ip.src)))
 				break
 
 		# size   = len(buf) 
