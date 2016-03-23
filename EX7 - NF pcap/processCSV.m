@@ -1,28 +1,9 @@
 
-window = 60;
-legends = {}
-%%
-inVar = low2Out';
-minTime =  min(inVar(1,:));
-inVar(1,:) = inVar(1,:) - minTime;
-maxTime = max(inVar(1,:));
-maxTime = round(maxTime);
-
-maxIndex = maxTime-window;
-timeIndex = 0:1:maxIndex;
-len  = length(timeIndex);
-data = zeros(maxIndex,1);
-counter = 1;
-for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i & inVar(1,:)<(i+window)));
-    data(counter) = Bytes/1024000;
-    counter = counter+1;
-end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1000000);
-legends = [legends,sprintf('low 2 (TL): %.2f MB per min',Mbpm)];
-data1 = data;
-
-
+window = 1;
+legends = {};
+res = 1;
+startTime = 0;
+FontSize = 15;
 
 %%
 inVar = lowOut';
@@ -31,19 +12,21 @@ inVar(1,:) = inVar(1,:) - minTime;
 maxTime = max(inVar(1,:));
 maxTime = round(maxTime);
 
-maxIndex = maxTime-window;
-timeIndex = 0:1:maxIndex;
+
+timeIndex = startTime:res:maxTime;
 len  = length(timeIndex);
-data = zeros(maxIndex,1);
+data = zeros(len,1);
 counter = 1;
 for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i & inVar(1,:)<(i+window)));
+    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)< (i)));
     data(counter) = Bytes/1024000;
     counter = counter+1;
 end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1000000);
-legends = [legends,sprintf('low 1(TL): %.2f MB per min',Mbpm)];
+Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
+legends = [legends,sprintf('low(TL): %.2f MB per min',Mbpm)];
 data2 = data;
+plot(timeIndex,data)
+hold on
 
 %%
 inVar = lowNCOut';
@@ -52,19 +35,21 @@ inVar(1,:) = inVar(1,:) - minTime;
 maxTime = max(inVar(1,:));
 maxTime = round(maxTime);
 
-maxIndex = maxTime-window;
-timeIndex = 0:1:maxIndex;
+
+timeIndex = startTime:res:maxTime;
 len  = length(timeIndex);
-data = zeros(maxIndex,1);
+data = zeros(len,1);
 counter = 1;
 for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i & inVar(1,:)<(i+window)));
+    Bytes = sum(inVar(2,inVar(1,:)>=i-window & inVar(1,:)<(i)));
     data(counter) = Bytes/1024000;
     counter = counter+1;
 end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1000000);
+Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
 legends = [legends,sprintf('low(NC): %.2f MB per min',Mbpm)];
 datalowNC = data;
+plot(timeIndex,data)
+hold on
 
 %%
 inVar = midOut';
@@ -73,19 +58,21 @@ inVar(1,:) = inVar(1,:) - minTime;
 maxTime = max(inVar(1,:));
 maxTime = round(maxTime);
 
-maxIndex = maxTime-window;
-timeIndex = 0:1:maxIndex;
+
+timeIndex = startTime:res:maxTime;
 len  = length(timeIndex);
-data = zeros(maxIndex,1);
+data = zeros(len,1);
 counter = 1;
 for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i & inVar(1,:)<(i+window)));
+    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)<(i)));
     data(counter) = Bytes/1024000;
     counter = counter+1;
 end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1000000);
+Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
 legends = [legends,sprintf('SD(TL): %.2f MB per min',Mbpm)];
 dataSDTL = data;
+plot(timeIndex,data)
+hold on
 
 %%
 inVar = midNCOut';
@@ -94,19 +81,21 @@ inVar(1,:) = inVar(1,:) - minTime;
 maxTime = max(inVar(1,:));
 maxTime = round(maxTime);
 
-maxIndex = maxTime-window;
-timeIndex = 0:1:maxIndex;
+
+timeIndex = startTime:res:maxTime;
 len  = length(timeIndex);
-data = zeros(maxIndex,1);
+data = zeros(len,1);
 counter = 1;
 for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i & inVar(1,:)<(i+window)));
+    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)<(i)));
     data(counter) = Bytes/1024000;
     counter = counter+1;
 end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1000000);
+Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
 legends = [legends,sprintf('SD(NC): %.2f MB per min',Mbpm)];
 dataSDNC = data;
+plot(timeIndex,data)
+hold on
 
 %%
 inVar = hdOut';
@@ -115,19 +104,21 @@ inVar(1,:) = inVar(1,:) - minTime;
 maxTime = max(inVar(1,:));
 maxTime = round(maxTime);
 
-maxIndex = maxTime-window;
-timeIndex = 0:1:maxIndex;
+
+timeIndex = startTime:res:maxTime;
 len  = length(timeIndex);
-data = zeros(maxIndex,1);
+data = zeros(len,1);
 counter = 1;
 for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i & inVar(1,:)<(i+window)));
+    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)<(i)));
     data(counter) = Bytes/1024000;
     counter = counter+1;
 end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1000000);
+Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
 legends = [legends,sprintf('HD(TL): %.2f MB per min',Mbpm)];
 dataHDTL = data;
+plot(timeIndex,data,'-x')
+hold on
 
 
 %%
@@ -137,19 +128,21 @@ inVar(1,:) = inVar(1,:) - minTime;
 maxTime = max(inVar(1,:));
 maxTime = round(maxTime);
 
-maxIndex = maxTime-window;
-timeIndex = 0:1:maxIndex;
+
+timeIndex = startTime:res:maxTime;
 len  = length(timeIndex);
-data = zeros(maxIndex,1);
+data = zeros(len,1);
 counter = 1;
 for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i & inVar(1,:)<(i+window)));
+    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)<(i)));
     data(counter) = Bytes/1024000;
     counter = counter+1;
 end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1000000);
+Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
 legends = [legends,sprintf('HD(NC): %.2f MB per min',Mbpm)];
 dataHDNC = data;
+plot(timeIndex,data,'-o')
+hold on
 
 %%
 inVar = autoNCOut';
@@ -158,38 +151,27 @@ inVar(1,:) = inVar(1,:) - minTime;
 maxTime = max(inVar(1,:));
 maxTime = round(maxTime);
 
-maxIndex = maxTime-window;
-timeIndex = 0:1:maxIndex;
+
+timeIndex = startTime:res:maxTime;
 len  = length(timeIndex);
-data = zeros(maxIndex,1);
+data = zeros(len,1);
 counter = 1;
 for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i & inVar(1,:)<(i+window)));
+    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)<(i)));
     data(counter) = Bytes/1024000;
     counter = counter+1;
 end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1000000);
+Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
 legends = [legends,sprintf('Auto(NC): %.2f MB per min',Mbpm)];
+plot(timeIndex,data,'-*')
+hold on
 dataAutoNC = data;
 
 
-
-
-
-plot(data1)
-hold on
-plot(data2)
-hold on
-plot(datalowNC)
-hold on
-plot(dataSDTL)
-hold on
-plot(dataSDNC)
-hold on
-plot(dataHDTL)
-hold on
-plot(dataHDNC)
-hold on
-plot(dataAutoNC)
-legend(legends);
+h_ylbl = ylabel('MB per mins');
+h_xlbl = xlabel('Time / Sec');
+h_legend = legend(legends);
+set(h_legend,'FontSize',FontSize);
+set(h_ylbl,'FontSize',FontSize);
+set(h_xlbl,'FontSize',FontSize);
 hold off
