@@ -30,13 +30,26 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
   def do_GET(self):
 
     try:
+
+      '''
+      for ip_dst in usageList:
+        flowDict = usageList[ip_dst]
+        for cookie in flowDict:
+          enteryDict = flowDict[cookie]
+
+          outDict = {}
+        pass
+      '''
+
+
       self.send_response(200)
       #send header first
       self.send_header('Content-type','text-html')
       self.end_headers()
-
-
       self.wfile.write(json.dumps(usageList))
+
+
+
       '''
       rootdir = 'c:/xampp/htdocs/' #file location
       try:
@@ -92,9 +105,7 @@ def _handle_FlowRemoved (event):
 # handler to display flow statistics received in JSON format
 # structure of event.stats is defined by ofp_flow_stats()
 def _handle_flowstats_received (event):
-    
-    global time
-    time = time +1
+
     #stats = flow_stats_to_list(event.stats)
     #log.debug("FlowStatsReceived from %s: %s", dpidToStr(event.connection.dpid), stats)
     
@@ -103,39 +114,80 @@ def _handle_flowstats_received (event):
         log.debug("Unrecongnised Switch (%s)",dpidToStr(event.connection.dpid))
         return #do nothing, 
 
-    '''
-    fileName = './pox/misc/' +sessionTime +'-flowStat.csv'
-    with open(fileName, 'a') as csvfile:
-      fieldnames = ['time','cookie','nw_src','nw_dst','packet_count','byte_count']
-      writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-      '''
     #NOTE:cookie differentiate if the flow is the same entry (cookie is unique for each flow)
     for f in event.stats:
       #timeStamp[f.cookie] = datetime.now().strftime('%Y%m%d%H%M%S');
       #TEST:isolate and match ip 
-
 
       if f.byte_count != 0 and f.priority == 6000: #signature
         ip_src = str(f.match.nw_src)
         ip_dst = str(f.match.nw_dst)
         log.debug("cookie:%s Traffic: %s -> %s (%s bytes)",f.cookie,ip_src,ip_dst,f.byte_count)
         
-        enteryDict = {}
-        enteryDict["cookie"] = f.cookie
-        enteryDict["SourceIP"] = ip_src
-        enteryDict["Bytes"] = f.byte_count
+
 
         if ip_dst not in usageList:
           flowDict = {}
+          #create new
+          enteryDict = {}
+          enteryDict["Time"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+          enteryDict["cookie"] = f.cookie
+          enteryDict["SourceIP"] = ip_src
+          enteryDict["Bytes"] = f.byte_count
+          enteryDict["Duration"] = f.duration_sec
+          enteryDict["RTime"] = 0
+          enteryDict["RBytes"] = 0
           flowDict[f.cookie] = enteryDict
+          enteryDict = {}
           usageList[ip_dst] = flowDict
         else:
+
           flowDict = usageList[ip_dst] 
-          flowDict[f.cookie] = enteryDict
+          if f.cookie  not in flowDict:
+            #create new
+            enteryDict = {}
+            enteryDict["Time"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S') 
+            enteryDict["cookie"] = f.cookie
+            enteryDict["SourceIP"] = ip_src
+            enteryDict["Bytes"] = f.byte_count
+            enteryDict["Duration"] = f.duration_sec
+            enteryDict["RTime"] = 0
+            enteryDict["RBytes"] = 0
+            flowDict[f.cookie] = enteryDict
+          else:    
+            enteryDict = flowDict[f.cookie];
+
+            #if there is change in byte count
+            if enteryDict["Bytes"] != f.byte_count:
+              enteryDict["Bytes"] = f.byte_count
+              enteryDict["Duration"] = f.duration_sec
+
+              if enteryDict["RTime"]  == 0 and f.duration_sec >60:
+                enteryDict["RTime"] = f.duration_sec
+                enteryDict["RBytes"] = f.byte_count
+              elif enteryDict["RTime"]  != 0 and f.duration_sec > 90:
+                timeSpan = float(f.duration_sec - enteryDict["RTime"])
+                byteCount = float(f.byte_count -enteryDict["RBytes"])
+                Mbps = byteCount * 8 / (timeSpan * 1024000)
+                enteryDict["Mbps"] = Mbps
+
+                if Mbps > 15:
+                  enteryDict["Quality"] = "???"
+                elif Mbps > 10:
+                    enteryDict["Quality"] = "UHD"
+                elif Mbps > 8:
+                    enteryDict["Quality"] = "UHD/HD"
+                elif Mbps > 5:
+                    enteryDict["Quality"] = "HD"
+                elif Mbps > 2:
+                    enteryDict["Quality"] = "HD/SD"
+                elif Mbps > 0.3:
+                  enteryDict["Quality"] = "SD"
+                else:
+                  pass
 
 
-    
-    
+
 # handler to display port statistics received in JSON format
 def _handle_portstats_received (event):
   stats = flow_stats_to_list(event.stats)
