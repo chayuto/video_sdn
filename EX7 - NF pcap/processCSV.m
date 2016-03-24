@@ -1,174 +1,55 @@
 
-window = 1;
-legends = {};
-res = 1;
-startTime = 0;
-FontSize = 15;
+    FontSize = 15;
+    legends = {};
+    %%
+    
+    
+% [data,timeIndex,Mbps] = processFlow(lowOut);
+% legends = [legends,sprintf('low(TL): %.2f Mbps',Mbps)];
+% plot(timeIndex,data)
+% hold on
 
 %%
-inVar = lowOut';
-minTime =  min(inVar(1,:));
-inVar(1,:) = inVar(1,:) - minTime;
-maxTime = max(inVar(1,:));
-maxTime = round(maxTime);
-
-
-timeIndex = startTime:res:maxTime;
-len  = length(timeIndex);
-data = zeros(len,1);
-counter = 1;
-for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)< (i)));
-    data(counter) = Bytes/1024000;
-    counter = counter+1;
-end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
-legends = [legends,sprintf('low(TL): %.2f MB per min',Mbpm)];
-data2 = data;
+[data,timeIndex,Mbps] = processFlow(lowNCOut);
+legends = [legends,sprintf('low(NC): %.2f Mbps',Mbps)];
 plot(timeIndex,data)
 hold on
 
 %%
-inVar = lowNCOut';
-minTime =  min(inVar(1,:));
-inVar(1,:) = inVar(1,:) - minTime;
-maxTime = max(inVar(1,:));
-maxTime = round(maxTime);
+% [data,timeIndex,Mbps] = processFlow(midOut);
+% legends = [legends,sprintf('SD(TL): %.2f Mbps',Mbps)];
+% plot(timeIndex,data)
+% hold on
 
-
-timeIndex = startTime:res:maxTime;
-len  = length(timeIndex);
-data = zeros(len,1);
-counter = 1;
-for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>=i-window & inVar(1,:)<(i)));
-    data(counter) = Bytes/1024000;
-    counter = counter+1;
-end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
-legends = [legends,sprintf('low(NC): %.2f MB per min',Mbpm)];
-datalowNC = data;
+%%
+[data,timeIndex,Mbps] = processFlow(midNCOut);
+legends = [legends,sprintf('SD(NC): %.2f Mbps',Mbps)];
 plot(timeIndex,data)
 hold on
 
 %%
-inVar = midOut';
-minTime =  min(inVar(1,:));
-inVar(1,:) = inVar(1,:) - minTime;
-maxTime = max(inVar(1,:));
-maxTime = round(maxTime);
+% [data,timeIndex,Mbps] = processFlow(hdOut);
+% legends = [legends,sprintf('HD(TL): %.2f Mbps',Mbps)];
+% plot(timeIndex,data)
+% hold on
 
 
-timeIndex = startTime:res:maxTime;
-len  = length(timeIndex);
-data = zeros(len,1);
-counter = 1;
-for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)<(i)));
-    data(counter) = Bytes/1024000;
-    counter = counter+1;
-end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
-legends = [legends,sprintf('SD(TL): %.2f MB per min',Mbpm)];
-dataSDTL = data;
+%%
+[data,timeIndex,Mbps] = processFlow(hdNCOut);
+legends = [legends,sprintf('HD(NC): %.2f Mbps',Mbps)];
 plot(timeIndex,data)
+
 hold on
 
 %%
-inVar = midNCOut';
-minTime =  min(inVar(1,:));
-inVar(1,:) = inVar(1,:) - minTime;
-maxTime = max(inVar(1,:));
-maxTime = round(maxTime);
-
-
-timeIndex = startTime:res:maxTime;
-len  = length(timeIndex);
-data = zeros(len,1);
-counter = 1;
-for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)<(i)));
-    data(counter) = Bytes/1024000;
-    counter = counter+1;
-end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
-legends = [legends,sprintf('SD(NC): %.2f MB per min',Mbpm)];
-dataSDNC = data;
+[data,timeIndex,Mbps] = processFlow(autoNCOut);
+legends = [legends,sprintf('Auto(TL): %.2f Mbps',Mbps)];
 plot(timeIndex,data)
-hold on
-
-%%
-inVar = hdOut';
-minTime =  min(inVar(1,:));
-inVar(1,:) = inVar(1,:) - minTime;
-maxTime = max(inVar(1,:));
-maxTime = round(maxTime);
-
-
-timeIndex = startTime:res:maxTime;
-len  = length(timeIndex);
-data = zeros(len,1);
-counter = 1;
-for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)<(i)));
-    data(counter) = Bytes/1024000;
-    counter = counter+1;
-end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
-legends = [legends,sprintf('HD(TL): %.2f MB per min',Mbpm)];
-dataHDTL = data;
-plot(timeIndex,data,'-x')
+axis([0 300 0 15])
 hold on
 
 
-%%
-inVar = hdNCOut';
-minTime =  min(inVar(1,:));
-inVar(1,:) = inVar(1,:) - minTime;
-maxTime = max(inVar(1,:));
-maxTime = round(maxTime);
-
-
-timeIndex = startTime:res:maxTime;
-len  = length(timeIndex);
-data = zeros(len,1);
-counter = 1;
-for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)<(i)));
-    data(counter) = Bytes/1024000;
-    counter = counter+1;
-end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
-legends = [legends,sprintf('HD(NC): %.2f MB per min',Mbpm)];
-dataHDNC = data;
-plot(timeIndex,data,'-o')
-hold on
-
-%%
-inVar = autoNCOut';
-minTime =  min(inVar(1,:));
-inVar(1,:) = inVar(1,:) - minTime;
-maxTime = max(inVar(1,:));
-maxTime = round(maxTime);
-
-
-timeIndex = startTime:res:maxTime;
-len  = length(timeIndex);
-data = zeros(len,1);
-counter = 1;
-for i = timeIndex
-    Bytes = sum(inVar(2,inVar(1,:)>i-window & inVar(1,:)<(i)));
-    data(counter) = Bytes/1024000;
-    counter = counter+1;
-end
-Mbpm = sum(inVar(2,:))*60/(maxTime*1024000);
-legends = [legends,sprintf('Auto(NC): %.2f MB per min',Mbpm)];
-plot(timeIndex,data,'-*')
-hold on
-dataAutoNC = data;
-
-
-h_ylbl = ylabel('MB per mins');
+h_ylbl = ylabel('Mbps');
 h_xlbl = xlabel('Time / Sec');
 h_legend = legend(legends);
 set(h_legend,'FontSize',FontSize);

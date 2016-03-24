@@ -31,9 +31,9 @@ def ip_to_str(address):
 	return socket.inet_ntop(socket.AF_INET, address)
 
 
-fin  = open('autoNC.pcap')
+fin  = open('low.pcap')
 pcap = dpkt.pcap.Reader(fin)
-fout = open('autoNCOut.csv', 'a')
+fout = open('lowOut.csv', 'a')
 
 pkt_counter = 0
 
@@ -45,6 +45,8 @@ for i in servListRAW:
 	#servList.append(i.strip()) #remove \n character at the end of the line
 	networkList.append(IPNetwork(i.strip()))
 
+firstTimestamp = pcap[0].timestamp
+
 for timestamp, buf in pcap:
 	# track number of packets
 	pkt_counter += 1
@@ -55,6 +57,8 @@ for timestamp, buf in pcap:
 	#print ""
 	utcTimeStamp = str(datetime.datetime.utcfromtimestamp(timestamp))
 	#print 'Timestamp: ', utcTimeStamp
+
+
 
 
 	# Unpack the Ethernet frame (mac src/dst, ethertype)

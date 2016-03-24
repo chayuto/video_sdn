@@ -1,0 +1,39 @@
+SDN first meet
+
+ubuntu@149.171.36.213
+openflow
+
+em1 - internal side
+p1p4 - external side 
+Bridge uniwideSDN
+
+sudo tcpdump -i em1 -s 0 -w mycap.pcap
+
+faucet controller 
+
+Vagrant -VM on terminal 
+
+sudo ovs-ofctl show uniwideSDN
+sudo ovs-vsctl get-controller uniwideSDN
+sudo ovs-ofctl dump-flows  uniwideSDN
+
+343D - internet / 343C - no internet 
+
+Phil alan - facility guy
+
+192.168.1.143
+
+sudo ovs-vsctl set-controller uniwideSDN  tcp:192.168.1.132:6633
+sudo ovs-vsctl del-controller uniwideSDN
+sudo ovs-ofctl del-flows uniwideSDN
+
+sudo python pox.py forwarding.NF_02 misc.flow_stat_1 log.level --DEBUG
+
+sudo python pox.py forwarding.EX8-1 misc.EX8-stat log.level --DEBUG
+
+sudo ovs-ofctl add-flow uniwideSDN in_port=1,actions=output:3
+sudo ovs-ofctl add-flow uniwideSDN in_port=3,actions=output:1
+
+scp wombat:/home/ubuntu/chayutCap.pcap .
+
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCrXprB9wHh9Jx2y7FI6OEPib+TIz+MpwUlDErZtkLshuJ0fYVRetjC/nPloO4XeE6d6m0cZzw1KA67P0jIL/Zyu1rPf09WU+tBD6TcHTRYiDsel+0Ca+r81nrxyC2l5G/FvvO1x2dJAIXO/qd3566/Z+DwoZQagSMvsw9Nl6gt/LXG9KaU60bj+PBuha3P0437Dzh/xPL775agWzEBFVfuOGUL6NPmqQI3jAxdpWGphMLX0VcrFa8QpEtW5TnHZhZH1Ik63LdfVvBiZywcklsN3Z3sqtXDtF7eDQrszRlT76gdtN1e5oVhv6HXeRcfpw8Y7KGfh60y24jfL9o4mVwZ chayut@Chayuts-MacBook-Pro.local
