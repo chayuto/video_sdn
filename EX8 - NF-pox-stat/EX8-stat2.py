@@ -31,22 +31,33 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
 
     try:
 
-      '''
+      outDict = {}
+      
       for ip_dst in usageList:
+
+        mList = [];
         flowDict = usageList[ip_dst]
         for cookie in flowDict:
-          enteryDict = flowDict[cookie]
+          entryDict = flowDict[cookie]
+          newDict = {}
+          newDict["Time"] = entryDict["Time"];
+          newDict["SourceIP"] = entryDict["SourceIP"]
+          newDict["Bytes"] = entryDict["Bytes"]
 
-          outDict = {}
+          if "Mbps" in entryDict:
+            newDict["Mbps"] = entryDict["Mbps"]
+          if "Quality" in entryDict:
+            newDict["Quality"]= entryDict["Quality"]
+          mList.append(newDict)
+
+        outDict[ip_dst] = mList;
         pass
-      '''
-
 
       self.send_response(200)
       #send header first
-      self.send_header('Content-type','text-html')
+      self.send_header('Content-type','application/json')
       self.end_headers()
-      self.wfile.write(json.dumps(usageList))
+      self.wfile.write(json.dumps(outDict))
 
 
 
@@ -120,7 +131,7 @@ def _handle_flowstats_received (event):
       #TEST:isolate and match ip 
 
       if f.byte_count != 0 and f.priority == 6000: #signature
-        ip_src = str(f.match.nw_src)
+        ip_src = str(f.match.nw_src) 
         ip_dst = str(f.match.nw_dst)
         log.debug("cookie:%s Traffic: %s -> %s (%s bytes)",f.cookie,ip_src,ip_dst,f.byte_count)
         
@@ -129,60 +140,60 @@ def _handle_flowstats_received (event):
         if ip_dst not in usageList:
           flowDict = {}
           #create new
-          enteryDict = {}
-          enteryDict["Time"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-          enteryDict["cookie"] = f.cookie
-          enteryDict["SourceIP"] = ip_src
-          enteryDict["Bytes"] = f.byte_count
-          enteryDict["Duration"] = f.duration_sec
-          enteryDict["RTime"] = 0
-          enteryDict["RBytes"] = 0
-          flowDict[f.cookie] = enteryDict
-          enteryDict = {}
+          entryDict = {}
+          entryDict["Time"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+          entryDict["cookie"] = f.cookie
+          entryDict["SourceIP"] = ip_src
+          entryDict["Bytes"] = f.byte_count
+          entryDict["Duration"] = f.duration_sec
+          entryDict["RTime"] = 0
+          entryDict["RBytes"] = 0
+          flowDict[f.cookie] = entryDict
+          entryDict = {}
           usageList[ip_dst] = flowDict
         else:
 
           flowDict = usageList[ip_dst] 
           if f.cookie  not in flowDict:
             #create new
-            enteryDict = {}
-            enteryDict["Time"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S') 
-            enteryDict["cookie"] = f.cookie
-            enteryDict["SourceIP"] = ip_src
-            enteryDict["Bytes"] = f.byte_count
-            enteryDict["Duration"] = f.duration_sec
-            enteryDict["RTime"] = 0
-            enteryDict["RBytes"] = 0
-            flowDict[f.cookie] = enteryDict
+            entryDict = {}
+            entryDict["Time"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S') 
+            entryDict["cookie"] = f.cookie
+            entryDict["SourceIP"] = ip_src
+            entryDict["Bytes"] = f.byte_count
+            entryDict["Duration"] = f.duration_sec
+            entryDict["RTime"] = 0
+            entryDict["RBytes"] = 0
+            flowDict[f.cookie] = entryDict
           else:    
-            enteryDict = flowDict[f.cookie];
+            entryDict = flowDict[f.cookie];
 
             #if there is change in byte count
-            if enteryDict["Bytes"] != f.byte_count:
-              enteryDict["Bytes"] = f.byte_count
-              enteryDict["Duration"] = f.duration_sec
+            if entryDict["Bytes"] != f.byte_count:
+              entryDict["Bytes"] = f.byte_count
+              entryDict["Duration"] = f.duration_sec
 
-              if enteryDict["RTime"]  == 0 and f.duration_sec >60:
-                enteryDict["RTime"] = f.duration_sec
-                enteryDict["RBytes"] = f.byte_count
-              elif enteryDict["RTime"]  != 0 and f.duration_sec > 90:
-                timeSpan = float(f.duration_sec - enteryDict["RTime"])
-                byteCount = float(f.byte_count -enteryDict["RBytes"])
+              if entryDict["RTime"]  == 0 and f.duration_sec >60:
+                entryDict["RTime"] = f.duration_sec
+                entryDict["RBytes"] = f.byte_count
+              elif entryDict["RTime"]  != 0 and f.duration_sec > 90:
+                timeSpan = float(f.duration_sec - entryDict["RTime"])
+                byteCount = float(f.byte_count -entryDict["RBytes"])
                 Mbps = byteCount * 8 / (timeSpan * 1024000)
-                enteryDict["Mbps"] = Mbps
+                entryDict["Mbps"] = Mbps
 
                 if Mbps > 15:
-                  enteryDict["Quality"] = "???"
+                  entryDict["Quality"] = "???"
                 elif Mbps > 10:
-                    enteryDict["Quality"] = "UHD"
+                    entryDict["Quality"] = "UHD"
                 elif Mbps > 8:
-                    enteryDict["Quality"] = "UHD/HD"
+                    entryDict["Quality"] = "UHD/HD"
                 elif Mbps > 5:
-                    enteryDict["Quality"] = "HD"
+                    entryDict["Quality"] = "HD"
                 elif Mbps > 2:
-                    enteryDict["Quality"] = "HD/SD"
+                    entryDict["Quality"] = "HD/SD"
                 elif Mbps > 0.3:
-                  enteryDict["Quality"] = "SD"
+                  entryDict["Quality"] = "SD"
                 else:
                   pass
 

@@ -13,7 +13,7 @@ import os
 from random import randint
 
 log = core.getLogger()
-
+cookieCounter = 0;
 
 def _handle_ConnectionUp (event):
   log.info("Configuring uniwideSDN: %s", dpidToStr(event.dpid))
@@ -65,8 +65,10 @@ def _handle_ConnectionUp (event):
 
 
 def _handle_PacketIn (event):
-  packet = event.parsed
 
+  global cookieCounter 
+
+  packet = event.parsed
   #log.debug("Packet In")
 
   if event.port > of.OFPP_MAX:
@@ -94,7 +96,8 @@ def _handle_PacketIn (event):
     #msg.match.tp_dst = packet.find("udp").dstport
     msg.idle_timeout = 60 #self remove after 1 minute
     #msg.hard_timeout = 3600
-    msg.cookie = 3000 + randint(1,999) #set flow ID
+    msg.cookie = 3000 + cookieCounter #set flow ID
+    cookieCounter = cookieCounter +1
     msg.priority =  6000
     msg.actions.append(of.ofp_action_output(port = 3))
 
