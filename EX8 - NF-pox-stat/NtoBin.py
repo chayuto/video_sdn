@@ -6,7 +6,17 @@ def GetArray(N):
 		Array = Array + new_Array
 	return Array[:N+1]
 
+def GetArray2(N):
+	Array = [0];
+	c1 = 1;
+	for i in range(1,N+1):
+		if i >= c1*2:
+			c1 = c1*2;
+		Array.append(Array[i-c1]+1)
 
-print GetArray (15)
+	return Array 
+
+print GetArray2 (31)
+print GetArray (31)
 
 
