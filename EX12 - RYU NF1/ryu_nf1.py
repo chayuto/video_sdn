@@ -57,14 +57,9 @@ class ryu_nf1(app_manager.RyuApp):
 
             flowmods = netflix_flows_initiation(dp, netflix_src)
             # self.logger.info("after creating flowmods")
-            dp.send_msg(flowmods)
+            datapath.send_msg(flowmods)
 
 
-        self.logger.info("before other flowmods")
-        flowmods = self.valve.other_flows_initiation(dp)
-        self.logger.info("after creating other flowmods")
-        dp.send_msg(flowmods)
-        self.logger.info("after send other flowmods")
 
 
 

@@ -216,12 +216,8 @@ class Faucet(app_manager.RyuApp):
                         self.logger.info("inserting this particular flow entry: %s:%s %s:%s", src_ip,src_port,dst_ip,dst_port)
                         flowmods = self.valve.netflix_flows_insertion(ev,src_ip,src_port,dst_ip,dst_port) 
                         dp.send_msg(flowmods)
-                        self.logger.info("this also done wooohoooooo")
+                       
  
-
-            
-
-
 
         # if ip_src in netflix_src_list :
         #     src_ip = msg.match['src_ip']
@@ -248,6 +244,7 @@ class Faucet(app_manager.RyuApp):
         # self.logger.info("before send flowmods")
         self.send_flow_msgs(dp, flowmods)
         # self.logger.info("before opening netflix file")
+
         netflix_src_list = tuple(open('./Netflix_AS2906', 'r'))
         
         for netflix_srcc in netflix_src_list:
