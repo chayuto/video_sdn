@@ -22,12 +22,33 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import ether_types
 
+from flask import Flask
+import threading
+
+app = Flask(__name__)
+
+
+@app.route('/')
+def hello_world():
+  
+
+  return "hello_world"
+  
+def runServer():
+  #log.info('http server is running...')
+  t = threading.Thread(target=app.run)
+  t.daemon = True
+  t.start()
+
+
 
 class ryu_nf1(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
         super(ryu_nf1, self).__init__(*args, **kwargs)
+
+        runServer()
 
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
@@ -137,7 +158,7 @@ class ryu_nf1(app_manager.RyuApp):
         action1 = parser.OFPActionOutput(clientPort);
         action2 = parser.OFPActionOutput(mirrorPort);
         actionController = parser.OFPActionOutput(ofp.OFPP_CONTROLLER);
-        actions = [action1 action2 ]
+        actions = [action1,action2 ]
         # self.logger.info("after actions")
         # self.logger.info("dp: %s, srcIp: %s match: %s priority: %s actions: %s", datapath, src_ip, match, priority, actions)
         
@@ -154,8 +175,10 @@ class ryu_nf1(app_manager.RyuApp):
 
     def netfilx_reactive_flow_mod(dp,srcIP,dstIP):
 
-
         pass
+
+
+        
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):

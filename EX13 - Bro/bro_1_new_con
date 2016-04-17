@@ -1,0 +1,8 @@
+event new_connection(c: connection ){
+	
+	print c$id$orig_h;
+	print port_to_count(c$id$orig_p);
+	print c$id$resp_h;
+	print port_to_count(c$id$resp_p);
+	print get_port_transport_proto(c$id$resp_p);
+}
