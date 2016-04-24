@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
@@ -25,8 +26,46 @@ from ryu.lib.packet import ethernet
 from flask import Flask
 import threading
 
+from broccoli import *
+import time as Time
+
 app = Flask(__name__)
 
+
+'''bro stuff'''
+bc = Connection("127.0.0.1:47758")
+
+def brocInit():
+    while True:
+        bc.processInput();
+        Time.sleep(1);
+
+def Startbroccoli():
+    t2 = threading.Thread(target=brocInit)
+    t2.daemon = True
+    t2.start()
+
+
+@event
+def test2(a,b,c,d,e,f,g,h,i,j,i6,j6):
+    
+    print repr(a), a
+    print repr(b), b
+    print "%.4f" % c
+    print d
+    print repr(e), e
+    print f
+    print repr(g), g
+    print repr(h), h
+    print repr(i), i
+    print repr(j), j
+    print repr(i6), i6
+    print repr(j6), j6
+
+    self.logger.debug(f);
+
+
+'''RYU stuff'''
 
 @app.route('/')
 def hello_world():
@@ -35,7 +74,6 @@ def hello_world():
   return "hello_world"
   
 def runServer():
-  #log.info('http server is running...')
   t = threading.Thread(target=app.run)
   t.daemon = True
   t.start()
@@ -48,7 +86,11 @@ class ryu_nf1(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(ryu_nf1, self).__init__(*args, **kwargs)
 
+        self.logger.debug("Init");
+        self.logger.debug("Start Serv");
         runServer()
+        self.logger.debug("Start ");
+        Startbroccoli()
 
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
@@ -178,10 +220,9 @@ class ryu_nf1(app_manager.RyuApp):
         pass
 
 
-        
-
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
         
         self.logger.debug("packet_In");
+
 
