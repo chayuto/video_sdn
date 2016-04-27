@@ -26,37 +26,17 @@ def test2(a,b,c,d,e,f,g,h,i,j,i6,j6):
     print repr(i6), i6
     print repr(j6), j6
 
-# Same as test2 except with typing this time.
-# For floating point types that are wrapped in a class, we do want to print
-# repr() to see that the event typing works.  Again the time argument is
-# normalized to a constant precision.
-@event(int,count,time,interval,bool,double,addr,port,addr,subnet,addr,subnet)
-def test2b(a,b,c,d,e,f,g,h,i,j,i6,j6):
-    print "==== atomic b %d ====" % recv
-    print repr(a), a
-    print repr(b), b
-    print repr(c), "%.4f" % c.val
-    print repr(d), d
-    print repr(e), e
-    print f
-    print repr(g), g
-    print repr(h), h
-    print repr(i), i
-    print repr(j), j
-    print repr(i6), i6
-    print repr(j6), j6
-
-rec = record_type("a", "b")
-other_rec = record_type("a")
-
-@event(rec)
-def test4(r):
+@event
+def new_nf_detect(a,b,c,d,):
     global recv
     recv += 1
-    print "==== record %d ====" % recv
-    print repr(r)
-    print repr(r.a), r.a
-    print repr(r.b), r.b
+    print "==== NF %d ====" % recv
+    print repr(a), a
+    print repr(b), b
+    print repr(c), c
+    print repr(d), d
+
+
 
 bc = Connection("127.0.0.1:47758")
 
@@ -78,27 +58,6 @@ bc.send("test1",
 recv = 0
 while True:
     bc.processInput();
-    if recv == 2:
-        break
+
     Time.sleep(1)
 
-
-r = record(rec)
-r.a = 42;
-r.b = addr("6.6.7.7")
-
-bc.send("test3", r)
-
-recv = 0
-while True:
-    bc.processInput();
-    if recv == 2:
-        break
-    Time.sleep(1)
-
-opt_record = record_type("one", "a", "b", "c", "d")
-r = record(opt_record)
-r.a = 13
-r.c = "helloworld"
-
-bc.send("test5", r)
