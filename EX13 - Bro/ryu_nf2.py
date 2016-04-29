@@ -80,16 +80,20 @@ class NFReactiveController(ControllerBase):
 
     def add_reactive_flow(self, req, cmd, **_kwargs):
         LOG.debug('add_reactive_flow')
-        LOG.debug(cmd)
+        
 
         try:
-            flow = ast.literal_eval(req.body)
+            data = ast.literal_eval(req.body)
+
+            dpid = data.get('dpid')
+            ip_dst = data.get('ip_dst')
+            port_dst = data.get('port_dst')
+            ip_src = data.get('ip_src')
+            port_src = data.get('port_src')
 
         except SyntaxError:
             LOG.debug('invalid syntax %s', req.body)
             return Response(status=400)
-
-        dpid = flow.get('dpid')
 
         if type(dpid) == str and not dpid.isdigit():
             LOG.debug('invalid dpid %s', dpid)
@@ -99,6 +103,13 @@ class NFReactiveController(ControllerBase):
 
         if dp is None:
             return Response(status=404)
+
+        LOG.debug(ip_dst)
+        LOG.debug(port_dst)
+        LOG.debug(ip_src)
+        LOG.debug(port_src)
+
+
 
         return Response(status=200)
 
