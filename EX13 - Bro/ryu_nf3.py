@@ -44,7 +44,8 @@ import ast
 from webob import Response
 
 
-LOG = logging.getLogger('ryu.app.ryu_nf2')
+LOG = logging.getLogger('ryu.app.ryu_nf3')
+NOVI_DPID = 0x0000000000000064
 
 # TODO: configurable
 INFLUXDB_DB = "gauge"
@@ -67,16 +68,51 @@ app  = Flask(__name__)
 
 
 class NFReactiveController(ControllerBase):
+
     def __init__(self, req, link, data, **config):
         super(NFReactiveController, self).__init__(req, link, data, **config)
         self.dpset = data['dpset']
         self.waiters = data['waiters']
+
+        self.gatewayPort = 24 #pica 8
+        self.clientPort = 26 #uniwideSDN
+        self.mirrorPort = 22
+
+        self.react_cookie_offset = 0 
 
     def get_dpids(self, req, **_kwargs):
         LOG.debug('get_dpids')
         dps = list(self.dpset.dps.keys())
         body = json.dumps(dps)
         return Response(content_type='application/json', body=body)
+
+    def netfilx_reactive_flow_mod(self,dp,srcIP,dstIP,src_port,dst_port):
+
+        match = parser.OFPMatch(ipv4_src=srcIP,ipv4_dst=dstIP,in_port=self.gatewayPort,tcp_src = src_port, tcp_dst = dst_port)
+        # self.logger.info("after ofpmatch")
+        priority = 20000
+        idle_timeout = 60
+
+        # TODO change instruction 
+
+        action1 = parser.OFPActionOutput(self.clientPort);
+        actionController = parser.OFPActionOutput(ofp.OFPP_CONTROLLER);
+        actions = [action1]
+        # self.logger.info("after actions")
+        # self.logger.info("dp: %s, srcIp: %s match: %s priority: %s actions: %s", datapath, src_ip, match, priority, actions)
+        
+        inst = [parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
+                                             actions)]
+        # self.logger.info("after inst")
+        
+        mod = parser.OFPFlowMod(datapath=dp, cookie=0x5500 + self.react_cookie_offset ,  priority=priority, table_id = 0, 
+                                match=match, command=ofp.OFPFC_ADD, instructions=inst, hard_timeout=0,
+                                idle_timeout=idle_timeout,
+                                flags=ofp.OFPFF_SEND_FLOW_REM)
+
+        self.react_cookie_offset += 1
+        
+        return mod
 
     def add_reactive_flow(self, req, cmd, **_kwargs):
         LOG.debug('add_reactive_flow')
@@ -109,9 +145,10 @@ class NFReactiveController(ControllerBase):
         LOG.debug(ip_src)
         LOG.debug(port_src)
 
-
+        dp.send_msg(self.netfilx_reactive_flow_mod(dp,ip_src,ip_dst,port_src,port_dst))
 
         return Response(status=200)
+
 
 
 ryuNFApp = 0;
@@ -133,12 +170,18 @@ class ryu_nf2(app_manager.RyuApp):
         ryuNFApp = self
         self.datapaths = {}
         self.logger.debug("Init");
+
+
+        self.gatewayPort = 24 #pica 8
+        self.clientPort = 26 #uniwideSDN
+        self.mirrorPort = 22
+
         #runServer()
         #self.logger.debug("Start BC ");
         #self.bc = Connection("127.0.0.1:47758")
 
         #self.flask_thread= hub.spawn(self._runServer)
-        #self.monitor_thread = hub.spawn(self._monitor)
+        self.monitor_thread = hub.spawn(self._monitor)
 
         self.dpset = kwargs['dpset']
         wsgi = kwargs['wsgi']
@@ -178,11 +221,11 @@ class ryu_nf2(app_manager.RyuApp):
     def _monitor(self):
 
         while True:
-            self.bc.processInput();
-            #self.logger.debug("Monitor");
+            #self.bc.processInput();
+            self.logger.debug("Monitor");
             for dp in self.datapaths.values():
                 self._request_stats(dp)
-            hub.sleep(1)
+            hub.sleep(2.5)
 
     def _request_stats(self,datapath):
         self.logger.debug('send stats request: %016x', datapath.id)
@@ -233,15 +276,21 @@ class ryu_nf2(app_manager.RyuApp):
 
     
         #proactive rules
+
+        
         netflix_src_list = tuple(open('./Netflix_AS2906', 'r'))
         
+
+        cookie_offset = 0
         for netflix_srcc in netflix_src_list:
             # self.logger.info("initiating and inserting netflix src flow entry: %s", netflix_srcc)
             netflix_src=netflix_srcc.strip()
 
-            flowmods = self.netflix_flows_mod(datapath, netflix_src)
+            flowmods = self.netflix_flows_mod(datapath, netflix_src,cookie_offset)
+            cookie_offset +=1
             # self.logger.info("after creating flowmods")
             datapath.send_msg(flowmods)
+        
         
 
 
@@ -264,17 +313,12 @@ class ryu_nf2(app_manager.RyuApp):
 
         self.NFdatapath = datapath
 
-
-        gatewayPort = 24 #pica 8
-        clientPort = 26 #uniwideSDN
-        mirrorPort = 22
-
         priority = 100
 
         #server -> client
-        match = parser.OFPMatch(in_port=gatewayPort)
+        match = parser.OFPMatch(in_port=self.gatewayPort)
 
-        action1 = parser.OFPActionOutput(clientPort,0);
+        action1 = parser.OFPActionOutput(self.clientPort,0);
         actions = [action1]
 
         inst = [parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
@@ -288,9 +332,9 @@ class ryu_nf2(app_manager.RyuApp):
 
 
         #Client -> Server 
-        match = parser.OFPMatch(in_port=clientPort)
+        match = parser.OFPMatch(in_port=self.clientPort)
 
-        action1 = parser.OFPActionOutput(gatewayPort,0);
+        action1 = parser.OFPActionOutput(self.gatewayPort,0);
         actions = [action1]
 
         inst = [parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
@@ -302,12 +346,8 @@ class ryu_nf2(app_manager.RyuApp):
         datapath.send_msg(mod);
 
 
-    def netflix_flows_mod(self,dp, netflix_src):
+    def netflix_flows_mod(self,dp, netflix_src,cookie_offset):
         datapath = dp
-
-        gatewayPort = 24 #pica 8
-        clientPort = 26 #uniwideSDN
-        mirrorPort = 22
 
         parser = datapath.ofproto_parser
 
@@ -315,15 +355,17 @@ class ryu_nf2(app_manager.RyuApp):
         part=src_ip.split("/")
         ip=part[0]
         self.logger.info(ip)
+
         mask="255.255.255.0"
+
         match = parser.OFPMatch(ipv4_src=(ip,mask)) #eth_type = 0x0800,
         # self.logger.info("after ofpmatch")
         priority = 10000
 
         # TODO change instruction 
 
-        action1 = parser.OFPActionOutput(clientPort);
-        action2 = parser.OFPActionOutput(mirrorPort);
+        action1 = parser.OFPActionOutput(self.clientPort);
+        action2 = parser.OFPActionOutput(self.mirrorPort);
         actionController = parser.OFPActionOutput(ofp.OFPP_CONTROLLER);
         actions = [action1,action2 ] #
         #actions = [action1 ] #
@@ -334,42 +376,10 @@ class ryu_nf2(app_manager.RyuApp):
                                              actions)]
         # self.logger.info("after inst")
         
-        mod = parser.OFPFlowMod(datapath=datapath, cookie=0x3309,  priority=priority, table_id = 0, 
+        mod = parser.OFPFlowMod(datapath=datapath, cookie=(0x3309 + cookie_offset),  priority=priority, table_id = 0, 
                                 match=match, command=ofp.OFPFC_ADD, instructions=inst, hard_timeout=0,
                                 idle_timeout=0,
                                 flags=ofp.OFPFF_SEND_FLOW_REM)
-        return mod
-
-
-    def netfilx_reactive_flow_mod(self,srcIP,dstIP):
-
-        gatewayPort = 1
-        clientPort = 2
-        mirrorPort = 3 
-
-        match = parser.OFPMatch(ipv4_src=srcIP,ipv4_dst=dstIP,in_port=gatewayPort)
-        # self.logger.info("after ofpmatch")
-        priority = 20000
-
-        # TODO change instruction 
-
-        action1 = parser.OFPActionOutput(clientPort);
-        actionController = parser.OFPActionOutput(ofp.OFPP_CONTROLLER);
-        actions = [action1]
-        # self.logger.info("after actions")
-        # self.logger.info("dp: %s, srcIp: %s match: %s priority: %s actions: %s", datapath, src_ip, match, priority, actions)
-        
-        inst = [parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
-                                             actions)]
-        # self.logger.info("after inst")
-        
-        mod = parser.OFPFlowMod(datapath=self.NFdatapath, cookie=0x5500,  priority=priority, table_id = 0, 
-                                match=match, command=ofp.OFPFC_ADD, instructions=inst, hard_timeout=0,
-                                idle_timeout=0,
-                                flags=ofp.OFPFF_SEND_FLOW_REM)
-
-
-
         return mod
 
 
@@ -400,10 +410,25 @@ class ryu_nf2(app_manager.RyuApp):
 
         self.logger.info("Flow Stat received");
 
-        fTable = [flow for flow in body if (flow.table_id == 0)];
+        
 
-        self.logger.info("Size: " +str(len(fTable)));
+        fTable = [flow for flow in body if (flow.priority == 10000 and flow.table_id == 0 )]; #and flow.byte_count > 0
+        fTable2 = [flow for flow in body if (flow.priority == 20000 and flow.table_id == 0 )]; #and flow.byte_count > 0
 
+        self.logger.info("Size1: " +str(len(fTable)));
+        self.logger.info("Size2: " +str(len(fTable2)));
+
+        return
+
+        for f in fTable2:
+            dpid  = msg.datapath.id
+            cookie = f.cookie
+            packet_count = f.packet_count
+            byte_count = f.byte_count
+            ip_src = str(f.match['ipv4_src'])
+            ip_dst = str(f.match['ipv4_dst'])
+
+        
 
         testPoints = []
         #[flow for flow in body if (flow.priority == 20000 and flow.table_id == 0)]
@@ -446,7 +471,7 @@ class ryu_nf2(app_manager.RyuApp):
                  #   logfile.write("match: {0}\n".format(str(f.match))) 
                   #  continue
 
-                logfile.write("Found Flow of Interest") 
+                #logfile.write("Found Flow of Interest") 
                 
                 ip_src = str(f.match['ipv4_src'])
                 ip_dst = str(f.match['ipv4_dst'])
