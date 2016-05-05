@@ -63,8 +63,39 @@ def ship_points_to_influxdb(points):
     return client.write_points(points=points, time_precision='s')
 
 
+transferDict = {}
+react_cookie_offset = 0 
 
 app  = Flask(__name__)
+
+@app.route('/')
+def hello_world():
+  outDict = {}
+      
+  '''
+  for ip_dst in transferDict:
+
+    mList = [];
+    flowDict = transferDict[ip_dst]
+    for cookie in flowDict:
+      entryDict = flowDict[cookie]
+      newDict = {}
+      newDict["Time"] = entryDict["Time"];
+      newDict["SourceIP"] = entryDict["SourceIP"]
+      newDict["Bytes"] = entryDict["Bytes"]
+
+      if "Mbps" in entryDict:
+        newDict["Mbps"] = entryDict["Mbps"]
+      if "Quality" in entryDict:
+        newDict["Quality"]= entryDict["Quality"]
+      mList.append(newDict)
+
+    outDict[ip_dst] = mList;
+    '''
+
+  return json.dumps(transferDict)
+
+
 
 
 class NFReactiveController(ControllerBase):
@@ -78,7 +109,7 @@ class NFReactiveController(ControllerBase):
         self.clientPort = 26 #uniwideSDN
         self.mirrorPort = 22
 
-        self.react_cookie_offset = 0 
+
 
     def get_dpids(self, req, **_kwargs):
         LOG.debug('get_dpids')
@@ -88,6 +119,7 @@ class NFReactiveController(ControllerBase):
 
     def netfilx_reactive_flow_mod(self,dp,srcIP,dstIP,src_port,dst_port):
 
+        global react_cookie_offset
         match = parser.OFPMatch(ipv4_src=srcIP,ipv4_dst=dstIP,in_port=self.gatewayPort,tcp_src = src_port, tcp_dst = dst_port)
         # self.logger.info("after ofpmatch")
         priority = 20000
@@ -105,12 +137,12 @@ class NFReactiveController(ControllerBase):
                                              actions)]
         # self.logger.info("after inst")
         
-        mod = parser.OFPFlowMod(datapath=dp, cookie=0x5500 + self.react_cookie_offset ,  priority=priority, table_id = 0, 
+        mod = parser.OFPFlowMod(datapath=dp, cookie= (0x5500 + react_cookie_offset),  priority=priority, table_id = 0, 
                                 match=match, command=ofp.OFPFC_ADD, instructions=inst, hard_timeout=0,
                                 idle_timeout=idle_timeout,
                                 flags=ofp.OFPFF_SEND_FLOW_REM)
 
-        self.react_cookie_offset += 1
+        react_cookie_offset = react_cookie_offset + 1
         
         return mod
 
@@ -155,7 +187,7 @@ ryuNFApp = 0;
 
 '''RYU stuff'''
 
-class ryu_nf2(app_manager.RyuApp):
+class ryu_nf3(app_manager.RyuApp):
 
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
@@ -165,11 +197,15 @@ class ryu_nf2(app_manager.RyuApp):
     }
 
     def __init__(self, *args, **kwargs):
-        super(ryu_nf2, self).__init__(*args, **kwargs)
+        super(ryu_nf3, self).__init__(*args, **kwargs)
         global ryuNFApp 
         ryuNFApp = self
         self.datapaths = {}
         self.logger.debug("Init");
+
+        #our internal record fpr stat
+        self.usageDict = {} #raw info with port level stat
+        self.calDict = {} #byte count, IP level
 
 
         self.gatewayPort = 24 #pica 8
@@ -180,7 +216,7 @@ class ryu_nf2(app_manager.RyuApp):
         #self.logger.debug("Start BC ");
         #self.bc = Connection("127.0.0.1:47758")
 
-        #self.flask_thread= hub.spawn(self._runServer)
+        self.flask_thread= hub.spawn(self._runServer)
         self.monitor_thread = hub.spawn(self._monitor)
 
         self.dpset = kwargs['dpset']
@@ -203,11 +239,6 @@ class ryu_nf2(app_manager.RyuApp):
         mapper.connect('stats', uri,
                        controller=NFReactiveController, action='add_reactive_flow',
                        conditions=dict(method=['POST']))
-
-    '''flask stuff'''
-    @app.route('/')
-    def hello_world():  
-        return "hello_world"
 
 
     def testInternal(self,fiveTuble):
@@ -403,6 +434,7 @@ class ryu_nf2(app_manager.RyuApp):
     ''' stat event handler'''
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
+        global transferDict
         rcv_time = time.time()
         msg = ev.msg
         body = msg.body
@@ -412,14 +444,14 @@ class ryu_nf2(app_manager.RyuApp):
 
         
 
-        fTable = [flow for flow in body if (flow.priority == 10000 and flow.table_id == 0 )]; #and flow.byte_count > 0
-        fTable2 = [flow for flow in body if (flow.priority == 20000 and flow.table_id == 0 )]; #and flow.byte_count > 0
+        fTable = [flow for flow in body if (flow.priority == 20000 and flow.table_id == 0 )]; #and flow.byte_count > 0
+         #and flow.byte_count > 0
 
         self.logger.info("Size1: " +str(len(fTable)));
+        
+        '''
+        fTable2 = [flow for flow in body if (flow.priority == 10000 and flow.table_id == 0 )];
         self.logger.info("Size2: " +str(len(fTable2)));
-
-        return
-
         for f in fTable2:
             dpid  = msg.datapath.id
             cookie = f.cookie
@@ -428,209 +460,202 @@ class ryu_nf2(app_manager.RyuApp):
             ip_src = str(f.match['ipv4_src'])
             ip_dst = str(f.match['ipv4_dst'])
 
-        
+        '''
+
 
         testPoints = []
         #[flow for flow in body if (flow.priority == 20000 and flow.table_id == 0)]
         for f in fTable:
             #for f in [flow for flow in body]:
 
-                dpid  = msg.datapath.id
-                cookie = f.cookie
-                packet_count = f.packet_count
-                byte_count = f.byte_count
-
-                '''
-                self.logger.info('%016x %8x %8d %8d',
-                                msg.datapath.id,
-                                f.instructions[0].actions[0].port,
-                                f.packet_count, f.byte_count)
-                
-
-                logfile.write("time: {0}\nref: {1}\nmsg: {2}\n".format(
-                msg.datapath.id, f.cookie, f.byte_count)) 
-                '''
-                
-                #Test Influx DB stuff
-                testTags = {         
-                        "flow_id":cookie,
-                        }
-
-                testPoints.append({
-                            "measurement": "test1",
-                            "tags": testTags,
-                            "time": int(rcv_time),
-                            "fields": {"value": int(f.byte_count + random.randint(1, 1000)) } })
+            dpid  = msg.datapath.id
+            cookie = f.cookie
+            packet_count = f.packet_count
+            byte_count = f.byte_count
             
+            #Test Influx DB stuff
+            testTags = {         
+                    "flow_id":cookie,
+                    }
 
-                '''checking'''  
-                if byte_count == 0:
-                    continue
+            testPoints.append({
+                        "measurement": "test1",
+                        "tags": testTags,
+                        "time": int(rcv_time),
+                        "fields": {"value": int(f.byte_count + random.randint(1, 1000)) } })
+        
 
-                #if (not hasattr(f.match, 'tcp_src') or not hasattr(a, 'tcp_dst')):
-                 #   logfile.write("match: {0}\n".format(str(f.match))) 
-                  #  continue
+            '''checking'''  
+            if byte_count == 0:
+                continue
 
-                #logfile.write("Found Flow of Interest") 
+            self.logger.info('cookie:%d byte_count: %d', cookie,byte_count);
+
+            #if (not hasattr(f.match, 'tcp_src') or not hasattr(a, 'tcp_dst')):
+             #   logfile.write("match: {0}\n".format(str(f.match))) 
+              #  continue
+
+            #logfile.write("Found Flow of Interest") 
+            
+            ip_src = str(f.match['ipv4_src'])
+            ip_dst = str(f.match['ipv4_dst'])
+
+            #process raw info and push to Influx DB
+            #TODO: more processing
+            points = []
+
+            #Influx DB stuff
+
+            if(f.match['tcp_src'] == 80):
+                endPointStr = "Mobile"
+            else:
+                endPointStr = "Web browser"
+
+            tags = {
+                    "dst_ip": ip_dst,
+                    "src_ip": ip_src,
+                    "src_port":f.match['tcp_src'],
+                    "dst_port":f.match['tcp_dst'],
+                    "flow_id":cookie,
+                    "Endpoint":endPointStr
+                    }
+
+
+            if cookie not in self.usageDict:
+                flowDict = {}
                 
-                ip_src = str(f.match['ipv4_src'])
-                ip_dst = str(f.match['ipv4_dst'])
+                flowDict["Time"] = int(rcv_time)
+                flowDict["cookie"] = cookie
+                flowDict["SourceIP"] = ip_src
+                flowDict["DestinationIP"] = ip_dst 
+                flowDict["tp_dst"] = f.match['tcp_dst']
+                flowDict["tp_src"] = f.match['tcp_src']
+                flowDict["Bytes"] = f.byte_count
+                flowDict["Duration"] = f.duration_sec
+                flowDict["RTime"] = 0
+                flowDict["RBytes"] = 0
 
-                #process raw info and push to Influx DB
-                #TODO: more processing
-                points = []
+                self.usageDict[cookie] = flowDict
 
-                #Influx DB stuff
+                points.append({
+                        "measurement": "volume",
+                        "tags": tags,
+                        "time": int(rcv_time),
+                        "fields": {"value": float(f.byte_count) } })
 
-                if(f.match['tcp_src'] == 80):
-                    endPointStr = "Mobile"
-                else:
-                    endPointStr = "Web browser"
+            else:
+                flowDict = self.usageDict[cookie]
 
-                tags = {
-                        "dst_ip": ip_dst,
-                        "src_ip": ip_src,
-                        "src_port":f.match['tcp_src'],
-                        "dst_port":f.match['tcp_dst'],
-                        "flow_id":cookie,
-                        "Endpoint":endPointStr
-                        }
+                #only update if the count are different
+                if flowDict["Bytes"] != f.byte_count:
 
+                    byteIncrement = f.byte_count - flowDict["Bytes"]
+                    timeIncrement = int(rcv_time) - flowDict["Time"]
 
-                if cookie not in self.usageDict:
-                    flowDict = {}
-                    
                     flowDict["Time"] = int(rcv_time)
-                    flowDict["cookie"] = cookie
-                    flowDict["SourceIP"] = ip_src
-                    flowDict["DestinationIP"] = ip_dst 
-                    flowDict["tp_dst"] = f.match['tcp_dst']
-                    flowDict["tp_src"] = f.match['tcp_src']
                     flowDict["Bytes"] = f.byte_count
                     flowDict["Duration"] = f.duration_sec
                     flowDict["RTime"] = 0
                     flowDict["RBytes"] = 0
 
-                    self.usageDict[cookie] = flowDict
+                    points.append({
+                        "measurement": "volume",
+                        "tags": tags,
+                        "time": int(rcv_time),
+                        "fields": {"value": float(f.byte_count) } })
 
                     points.append({
-                            "measurement": "volume",
-                            "tags": tags,
-                            "time": int(rcv_time),
-                            "fields": {"value": float(f.byte_count) } })
+                        "measurement": "rate",
+                        "tags": tags,
+                        "time": int(rcv_time),
+                        "fields": {"value": float(byteIncrement) } })
 
-                else:
-                    flowDict = self.usageDict[cookie]
+                    #avoid buffering time, mark byte count at 60s
+                    if f.duration_sec > 60 and flowDict["RTime"] == 0:
 
-                    #only update if the count are different
-                    if flowDict["Bytes"] != f.byte_count:
+                        flowDict["RTime"] = f.duration_sec
+                        flowDict["RBytes"] = f.byte_count
 
-                        byteIncrement = f.byte_count - flowDict["Bytes"]
-                        timeIncrement = int(rcv_time) - flowDict["Time"]
-
-                        flowDict["Time"] = int(rcv_time)
-                        flowDict["Bytes"] = f.byte_count
-                        flowDict["Duration"] = f.duration_sec
-                        flowDict["RTime"] = 0
-                        flowDict["RBytes"] = 0
-
-                        points.append({
-                            "measurement": "volume",
-                            "tags": tags,
-                            "time": int(rcv_time),
-                            "fields": {"value": float(f.byte_count) } })
-
-                        points.append({
-                            "measurement": "rate",
-                            "tags": tags,
-                            "time": int(rcv_time),
-                            "fields": {"value": float(byteIncrement) } })
-
-                        #avoid buffering time, mark byte count at 60s
-                        if f.duration_sec > 60 and flowDict["RTime"] == 0:
-
-                            flowDict["RTime"] = f.duration_sec
-                            flowDict["RBytes"] = f.byte_count
-
-                        self.usageDict[cookie] = flowDict
+                    self.usageDict[cookie] = flowDict
 
 
-                        '''MBPS calculation'''
-                        if ip_src not in self.calDict:
-                            
+                    '''MBPS calculation'''
+                    if ip_src not in self.calDict:
+                        
+                        entryDict = {}
+                        #first entry
+                        entryDict["Byte"] = byteIncrement;
+                        entryDict["Time"] = int(rcv_time);
+                        entryDict["TimePrevious"] = int(rcv_time);
+                        entryDict["BytePrevious"] = byteIncrement;
+
+                        dstDict = {}
+                        dstDict[ip_dst] = entryDict
+                        self.calDict[ip_src] = dstDict
+                    else:
+                        dstDict = self.calDict[ip_src]
+
+                        if ip_dst not in dstDict:
                             entryDict = {}
                             #first entry
                             entryDict["Byte"] = byteIncrement;
                             entryDict["Time"] = int(rcv_time);
                             entryDict["TimePrevious"] = int(rcv_time);
                             entryDict["BytePrevious"] = byteIncrement;
-
-                            dstDict = {}
                             dstDict[ip_dst] = entryDict
-                            self.calDict[ip_src] = dstDict
                         else:
-                            dstDict = self.calDict[ip_src]
+                            entryDict = dstDict[ip_dst]
+                            newByteCount = entryDict["Byte"] + byteIncrement;
+                            entryDict["Byte"] = newByteCount 
+                            entryDict["Time"] = int(rcv_time);
 
-                            if ip_dst not in dstDict:
-                                entryDict = {}
-                                #first entry
-                                entryDict["Byte"] = byteIncrement;
-                                entryDict["Time"] = int(rcv_time);
+                            #if more than 10 sec from previous measurement
+                            timeDiff = int(rcv_time) - entryDict["TimePrevious"]
+                            if  timeDiff > 10:
+                                totalByteInc = float(newByteCount  - entryDict["BytePrevious"])
+                                Mbps = float(totalByteInc) * 8 / (timeDiff * 1024000)
+
+                                #reset previous record
                                 entryDict["TimePrevious"] = int(rcv_time);
-                                entryDict["BytePrevious"] = byteIncrement;
-                                dstDict[ip_dst] = entryDict
-                            else:
-                                entryDict = dstDict[ip_dst]
-                                newByteCount = entryDict["Byte"] + byteIncrement;
-                                entryDict["Byte"] = newByteCount 
-                                entryDict["Time"] = int(rcv_time);
-
-                                #if more than 10 sec from previous measurement
-                                timeDiff = int(rcv_time) - entryDict["TimePrevious"]
-                                if  timeDiff > 10:
-                                    totalByteInc = float(newByteCount  - entryDict["BytePrevious"])
-                                    Mbps = float(totalByteInc) * 8 / (timeDiff * 1024000)
-
-                                    #reset previous record
-                                    entryDict["TimePrevious"] = int(rcv_time);
-                                    entryDict["BytePrevious"] = newByteCount;
+                                entryDict["BytePrevious"] = newByteCount;
 
 
+                                QualityStr = "???"
+                                if Mbps > 15:
                                     QualityStr = "???"
-                                    if Mbps > 15:
-                                        QualityStr = "???"
-                                    elif Mbps > 10:
-                                        QualityStr = "UHD"
-                                    elif Mbps > 8:
-                                        QualityStr = "UHD/HD"
-                                    elif Mbps > 5:
-                                        QualityStr = "HD"
-                                    elif Mbps > 2:
-                                        QualityStr = "HD/SD"
-                                    elif Mbps > 0.3:
-                                        QualityStr = "SD"
-                                    else:
-                                        QualityStr = "???"
-                                        pass
+                                elif Mbps > 10:
+                                    QualityStr = "UHD"
+                                elif Mbps > 8:
+                                    QualityStr = "UHD/HD"
+                                elif Mbps > 5:
+                                    QualityStr = "HD"
+                                elif Mbps > 2:
+                                    QualityStr = "HD/SD"
+                                elif Mbps > 0.3:
+                                    QualityStr = "SD"
+                                else:
+                                    QualityStr = "???"
+                                    pass
 
-                                    MbpsTags = {
-                                                "dst_ip": ip_dst,
-                                                "src_ip": ip_src,
-                                                "src_port":f.match['tcp_src'],
-                                                "Quality" :QualityStr,
-                                                "Endpoint":endPointStr
-                                        }
+                                MbpsTags = {
+                                            "dst_ip": ip_dst,
+                                            "src_ip": ip_src,
+                                            "src_port":f.match['tcp_src'],
+                                            "Quality" :QualityStr,
+                                            "Endpoint":endPointStr
+                                    }
 
-                                    #update Mbps measurement
-                                    points.append({
-                                        "measurement": "Mbps",
-                                        "tags": MbpsTags,
-                                        "time": int(rcv_time),
-                                        "fields": {"value": float(Mbps) }} )
+                                #update Mbps measurement
+                                points.append({
+                                    "measurement": "Mbps",
+                                    "tags": MbpsTags,
+                                    "time": int(rcv_time),
+                                    "fields": {"value": float(Mbps) }} )
 
-                #ship_points_to_influxdb(points)
+            #ship_points_to_influxdb(points)
 
-            #ship_points_to_influxdb(testPoints)
+        #ship_points_to_influxdb(testPoints)
+        transferDict = self.usageDict
 
 
 
