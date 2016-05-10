@@ -86,31 +86,31 @@ def hello_world():
 
             newDict = {}
             st = datetime.datetime.fromtimestamp(entryDict["Time"]).strftime('%Y-%m-%d %H:%M:%S')
-            newDict["Time"] = st;
+            newDict["time"] = st;
             newDict["srcIp"] = ip_src
             newDict["dstIp"] = ip_dst
-            newDict["BeginTime"] = entryDict["BeginTime"]
-            newDict["Duration"] =entryDict["Duration"]
-            newDict["Byte"] = entryDict["Byte"]
+            newDict["beginTime"] = entryDict["BeginTime"]
+            newDict["duration"] =entryDict["Duration"]
+            newDict["byte"] = entryDict["Byte"]
 
             if "Endpoint" in entryDict:
-              newDict["Endpoint"] =  entryDict["Endpoint"] 
+              newDict["endpoint"] =  entryDict["Endpoint"] 
 
             if "Mbps" in entryDict:
-              newDict["Mbps"] = entryDict["Mbps"]
+              newDict["mbps"] = entryDict["Mbps"]
             if "Quality" in entryDict:
-              newDict["Quality"]= entryDict["Quality"]
+              newDict["quality"]= entryDict["Quality"]
             mList.append(newDict)
 
 
         outDict["flows"] = mList;
 
         aggDict = {}
-        aggDict["TotalBytes"] = reportAggDict["Default_byte_count"] + reportAggDict["Total_NF_count"] 
-        aggDict["NetflixBytes"] = reportAggDict["Total_NF_count"]
+        aggDict["totalBytes"] = reportAggDict["Default_byte_count"] + reportAggDict["Total_NF_count"] 
+        aggDict["netflixBytes"] = reportAggDict["Total_NF_count"]
         st = datetime.datetime.fromtimestamp(reportAggDict["Time"]).strftime('%Y-%m-%d %H:%M:%S')
-        aggDict["Time"] = st
-        outDict["aggreatedUsage"] = aggDict
+        aggDict["time"] = st
+        outDict["usage"] = aggDict
 
     return json.dumps(outDict)
 
@@ -504,7 +504,6 @@ class ryu_nf4(app_manager.RyuApp):
                     "src_port":f.match['tcp_src'],
                     "dst_port":f.match['tcp_dst'],
                     "flow_id":cookie,
-                    "Endpoint":endPointStr
                     }
 
 
