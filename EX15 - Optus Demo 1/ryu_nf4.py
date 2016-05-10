@@ -85,8 +85,7 @@ def hello_world():
 
 
             newDict = {}
-            st = datetime.datetime.fromtimestamp(entryDict["Time"]).strftime('%Y-%m-%d %H:%M:%S')
-            newDict["time"] = st;
+            newDict["time"] = entryDict["Time"]
             newDict["srcIp"] = ip_src
             newDict["dstIp"] = ip_dst
             newDict["beginTime"] = entryDict["BeginTime"]
@@ -108,8 +107,7 @@ def hello_world():
         aggDict = {}
         aggDict["totalBytes"] = reportAggDict["Default_byte_count"] + reportAggDict["Total_NF_count"] 
         aggDict["netflixBytes"] = reportAggDict["Total_NF_count"]
-        st = datetime.datetime.fromtimestamp(reportAggDict["Time"]).strftime('%Y-%m-%d %H:%M:%S')
-        aggDict["time"] = st
+        aggDict["time"] = reportAggDict["Time"]
         outDict["usage"] = aggDict
 
     return json.dumps(outDict)
@@ -156,7 +154,7 @@ class NFReactiveController(ControllerBase):
                                              actions)]
         # self.logger.info("after inst")
         
-        mod = parser.OFPFlowMod(datapath=dp, cookie= (0x5500 + react_cookie_offset),  priority=priority, table_id = 0, 
+        mod = parser.OFPFlowMod(datapath=dp, cookie= (0x47470000 + int((time.time())*100000)) ,  priority=priority, table_id = 0, 
                                 match=match, command=ofp.OFPFC_ADD, instructions=inst, hard_timeout=0,
                                 idle_timeout=idle_timeout,
                                 flags=ofp.OFPFF_SEND_FLOW_REM)
@@ -464,13 +462,8 @@ class ryu_nf4(app_manager.RyuApp):
             self.aggreatedUsage["Default_byte_count"] = f.byte_count
             self.aggreatedUsage["Time"] = int(rcv_time)
 
+        points = [] #for influx 
 
-        
-
-
-
-
-        testPoints = []
         #[flow for flow in body if (flow.priority == 20000 and flow.table_id == 0)]
         for f in fTable:
             #for f in [flow for flow in body]:
@@ -485,7 +478,7 @@ class ryu_nf4(app_manager.RyuApp):
             
              #process raw info and push to Influx DB
             #TODO: more processing
-            points = []
+            
 
             self.logger.info('cookie:%d byte_count: %d', cookie,byte_count);
 
@@ -499,15 +492,32 @@ class ryu_nf4(app_manager.RyuApp):
                 endPointStr = "Web browser"
 
             tags = {
+                    "dpid": dpid, #int16
                     "dst_ip": ip_dst,
                     "src_ip": ip_src,
                     "src_port":f.match['tcp_src'],
                     "dst_port":f.match['tcp_dst'],
                     "flow_id":cookie,
+                    "attribute_provider":"Optus",
+                    "attribute_user":endPointStr,
+                    "attribute_others":"NF"
                     }
+
+            #append point to influx Entry
+            points.append({
+                "measurement": "flowStat",
+                "tags": tags,
+                "time": int(rcv_time),
+                "fields": {
+                    "byte_count": int(f.byte_count),
+                    "packet_count": int(f.packet_count),
+                    "duration": int(f.duration_sec)
+                 }
+                  })
 
 
             if cookie not in self.usageDict:
+
                 flowDict = {}
                 
                 flowDict["Time"] = int(rcv_time)
@@ -523,11 +533,6 @@ class ryu_nf4(app_manager.RyuApp):
 
                 self.usageDict[cookie] = flowDict
 
-                points.append({
-                        "measurement": "volume",
-                        "tags": tags,
-                        "time": int(rcv_time),
-                        "fields": {"value": float(f.byte_count) } })
 
             else:
                 flowDict = self.usageDict[cookie]
@@ -539,8 +544,14 @@ class ryu_nf4(app_manager.RyuApp):
                     timeIncrement = int(rcv_time) - flowDict["Time"]
 
                     if(byteIncrement < 0):
-                        self.logger.info("!!! HEY it's negative!");
+                        self.logger.info("!!! HEY its negative!");
+                        self.logger.info("Counts: %d %d",f.byte_count , flowDict["Bytes"]);
+                        self.logger.info("Time: %d %d", int(rcv_time) , flowDict["Time"]);
+                        self.logger.info("cookie: %d %d", cookie, f.cookie);
+                        self.logger.info("port: %s %s", flowDict["tp_dst"], f.match['tcp_dst']);
+                        raise ValueError('!!! HEY its negative!')
 
+                        continue;
 
                     #add increment to total NF counter
                     self.aggreatedUsage["Total_NF_count"] += byteIncrement;
@@ -551,17 +562,7 @@ class ryu_nf4(app_manager.RyuApp):
                     flowDict["RTime"] = 0
                     flowDict["RBytes"] = 0
 
-                    points.append({
-                        "measurement": "volume",
-                        "tags": tags,
-                        "time": int(rcv_time),
-                        "fields": {"value": float(f.byte_count) } })
-
-                    points.append({
-                        "measurement": "rate",
-                        "tags": tags,
-                        "time": int(rcv_time),
-                        "fields": {"value": float(byteIncrement) } })
+                    
 
                     #avoid buffering time, mark byte count at 60s
                     if f.duration_sec > 60 and flowDict["RTime"] == 0:
@@ -644,6 +645,7 @@ class ryu_nf4(app_manager.RyuApp):
                                     pass
                                 entryDict["Quality"] = QualityStr
 
+                                '''
                                 MbpsTags = {
                                             "dst_ip": ip_dst,
                                             "src_ip": ip_src,
@@ -658,8 +660,9 @@ class ryu_nf4(app_manager.RyuApp):
                                     "tags": MbpsTags,
                                     "time": int(rcv_time),
                                     "fields": {"value": float(Mbps) }} )
-
-            #ship_points_to_influxdb(points)
+                                '''
+        if points:
+            ship_points_to_influxdb(points)
 
         #ship_points_to_influxdb(testPoints)
         transferDict = self.calDict
