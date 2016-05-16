@@ -73,6 +73,6 @@ bc = Connection("127.0.0.1:47758")
 while True:
 	bc.processInput();
 
-	Time.sleep(0.5)
+	Time.sleep(0.1)
 
 
