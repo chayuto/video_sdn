@@ -85,24 +85,25 @@ def hello_world():
         for ip_src in srcDict:
             entryDict = srcDict[ip_src]
 
+            #only report if it has significant traffics
+            if (entryDict["isVideo"]):
 
-            newDict = {}
-            newDict["time"] = entryDict["Time"]
-            newDict["srcIp"] = ip_src
-            newDict["dstIp"] = ip_dst
-            newDict["beginTime"] = entryDict["BeginTime"]
-            newDict["duration"] =entryDict["Duration"]
-            newDict["byte"] = entryDict["Byte"]
+                newDict = {}
+                newDict["time"] = entryDict["Time"]
+                newDict["srcIp"] = ip_src
+                newDict["dstIp"] = ip_dst
+                newDict["beginTime"] = entryDict["BeginTime"]
+                newDict["duration"] =entryDict["Duration"]
+                newDict["byte"] = entryDict["Byte"]
 
-            if "Endpoint" in entryDict:
-              newDict["endpoint"] =  entryDict["Endpoint"] 
+                if "Endpoint" in entryDict:
+                  newDict["endpoint"] =  entryDict["Endpoint"] 
 
-            if "Mbps" in entryDict:
-              newDict["mbps"] = entryDict["Mbps"]
-            if "Quality" in entryDict:
-              newDict["quality"]= entryDict["Quality"]
-            mList.append(newDict)
-
+                if "Mbps" in entryDict:
+                  newDict["mbps"] = entryDict["Mbps"]
+                if "Quality" in entryDict:
+                  newDict["quality"]= entryDict["Quality"]
+                mList.append(newDict)
 
         outDict["flows"] = mList;
 
@@ -492,9 +493,9 @@ class ryu_nf4(app_manager.RyuApp):
 
            
             if(f.match['tcp_src'] == 80):
-                endPointStr = "Mobile"
+                endPointStr = "mobile"
             else:
-                endPointStr = "Web browser"
+                endPointStr = "web browser"
 
             tags = {
                     "dpid": dpid, #int16
@@ -586,7 +587,10 @@ class ryu_nf4(app_manager.RyuApp):
                     entryDict["Duration"] = 0
                     entryDict["TimePrevious"] = int(rcv_time);
                     entryDict["BytePrevious"] = byteIncrement;
+                    entryDict["TimePrevious2"] = int(rcv_time);
+                    entryDict["BytePrevious2"] = byteIncrement;
                     entryDict["Endpoint"] = endPointStr
+                    entryDict["isVideo"] = False;
 
                     dstDict = {}
                     dstDict[ip_dst] = entryDict
@@ -599,6 +603,7 @@ class ryu_nf4(app_manager.RyuApp):
                         
                         if byteIncrement == 0:
                             continue
+
                         #first entry
                         entryDict = {}
                         entryDict["Byte"] = byteIncrement;
@@ -607,7 +612,10 @@ class ryu_nf4(app_manager.RyuApp):
                         entryDict["Duration"] = 0
                         entryDict["TimePrevious"] = int(rcv_time);
                         entryDict["BytePrevious"] = byteIncrement;
+                        entryDict["TimePrevious2"] = int(rcv_time);
+                        entryDict["BytePrevious2"] = byteIncrement;
                         entryDict["Endpoint"] = endPointStr
+                        entryDict["isVideo"] = False;
                         dstDict[ip_dst] = entryDict
 
                     else:
@@ -619,45 +627,64 @@ class ryu_nf4(app_manager.RyuApp):
                         entryDict["Time"] = int(rcv_time);
                         entryDict["Duration"] = int(rcv_time) - entryDict["BeginTime"];
 
-                        #if more than 20 sec from previous measurement
+                        if entryDict["Duration"] > 10:
+                            if (float(entryDict["Byte"]) * 8 / (entryDict["Duration"]  * 1024 * 1024) > 0.5):
+                                entryDict["isVideo"] = True;
+
+                        timeDiff = int(rcv_time) - entryDict["TimePrevious2"]
+                        totalByteInc = newByteCount  - entryDict["BytePrevious2"]
+
+                        if timeDiff > 35:
+
+                            #reset previous record
+                            entryDict["TimePrevious2"] = int(rcv_time);
+                            entryDict["BytePrevious2"] = newByteCount;
+
+                            if entryDict["Duration"] > 70:
+                                Mbps = float(totalByteInc) * 8 / (timeDiff  * 1024 * 1024)
+                                entryDict["Mbps"] = Mbps
+
+                                '''
+                                if "Mbps" in entryDict:
+                                    entryDict["Mbps"] = Mbps * (0.8) + entryDict["Mbps"] * 0.2 
+                                else:
+                                    entryDict["Mbps"] = Mbps
+                                '''
+
+                                QualityStr = "???"
+                                if Mbps > 30:
+                                    QualityStr = "???"
+                                elif Mbps > 15:
+                                    QualityStr = "UHD"
+                                    entryDict["Quality"] = QualityStr
+                                elif Mbps > 4:
+                                    QualityStr = "HD"
+                                    entryDict["Quality"] = QualityStr
+                                elif Mbps > 1:
+                                    QualityStr = "SD"
+                                    entryDict["Quality"] = QualityStr
+                                elif Mbps > 0.5:
+                                    QualityStr = "LOW"
+                                    entryDict["Quality"] = QualityStr
+                                else:
+                                    pass
+
+
+                        #for idle flow deletion
                         timeDiff = int(rcv_time) - entryDict["TimePrevious"]
                         totalByteInc = newByteCount  - entryDict["BytePrevious"]
 
-                        if  timeDiff > 20 and entryDict["Duration"] > 60:
+                        #if more than 15 sec from previous measurement
+                        if timeDiff > 15 :
+                            #reset previous record
+                            entryDict["TimePrevious"] = int(rcv_time);
+                            entryDict["BytePrevious"] = newByteCount;
 
                             if totalByteInc != 0:
-                                Mbps = float(totalByteInc) * 8 / (timeDiff * 1024000)
+                                pass
 
-                                #reset previous record
-                                entryDict["TimePrevious"] = int(rcv_time);
-                                entryDict["BytePrevious"] = newByteCount;
-                                entryDict["Mbps"] = Mbps
-
-
-                                QualityStr = "???"
-                                if Mbps > 15:
-                                    QualityStr = "???"
-                                elif Mbps > 10:
-                                    QualityStr = "UHD"
-                                    entryDict["Quality"] = QualityStr
-                                elif Mbps > 8:
-                                    QualityStr = "UHD/HD"
-                                    entryDict["Quality"] = QualityStr
-                                elif Mbps > 5:
-                                    QualityStr = "HD"
-                                    entryDict["Quality"] = QualityStr
-                                elif Mbps > 2:
-                                    QualityStr = "HD/SD"
-                                    entryDict["Quality"] = QualityStr
-                                elif Mbps > 0.3:
-                                    QualityStr = "SD"
-                                    entryDict["Quality"] = QualityStr
-                                else:
-                                    
-                                    pass
-                                
                             else:
-                                #no traffic in previous 20 sec
+                                #no traffic in previous 15 sec
                                 del dstDict[ip_dst]
                                 self.calDict[ip_src] = dstDict
 
