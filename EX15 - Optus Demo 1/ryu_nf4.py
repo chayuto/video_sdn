@@ -79,11 +79,11 @@ def hello_world():
 
     outDict = {}
     mList = [];
-    for ip_dst in transferDict:
+    for ip_src in transferDict:
 
-        srcDict = transferDict[ip_dst]
-        for ip_src in srcDict:
-            entryDict = srcDict[ip_src]
+        srcDict = transferDict[ip_src]
+        for ip_dst in srcDict:
+            entryDict = srcDict[ip_dst]
 
             #only report if it has significant traffics
             if (entryDict["isVideo"]):
@@ -114,8 +114,6 @@ def hello_world():
     outDict["usage"] = aggDict
 
     return json.dumps(outDict)
-
-
 
 
 class NFReactiveController(ControllerBase):
@@ -230,6 +228,7 @@ class ryu_nf4(app_manager.RyuApp):
         self.aggreatedUsage["Total_NF_count"] = 0;
         self.aggreatedUsage["Default_byte_count"] = 0;
         self.aggreatedUsage["Time"] = 0;
+        self.aggreatedUsage["active"] = 0;
 
 
         self.gatewayPort = 24 #pica 8
@@ -577,8 +576,10 @@ class ryu_nf4(app_manager.RyuApp):
                 '''MBPS calculation'''
                 if ip_src not in self.calDict:
 
+                    #first seen, but 0 byte
                     if byteIncrement == 0:
                         continue
+
                     #first entry
                     entryDict = {}
                     entryDict["Byte"] = byteIncrement;
@@ -601,6 +602,7 @@ class ryu_nf4(app_manager.RyuApp):
 
                     if ip_dst not in dstDict:
                         
+                        #first seen, but 0 byte
                         if byteIncrement == 0:
                             continue
 
@@ -627,9 +629,11 @@ class ryu_nf4(app_manager.RyuApp):
                         entryDict["Time"] = int(rcv_time);
                         entryDict["Duration"] = int(rcv_time) - entryDict["BeginTime"];
 
-                        if entryDict["Duration"] > 10:
-                            if (float(entryDict["Byte"]) * 8 / (entryDict["Duration"]  * 1024 * 1024) > 0.5):
-                                entryDict["isVideo"] = True;
+                        flowMbps = float(entryDict["Byte"]) * 8 / (entryDict["Duration"]  * 1024 * 1024);
+                        if (flowMbps > 0.5):
+                            entryDict["isVideo"] = True;
+                        elif (flowMbps < 0.3):
+                            entryDict["isVideo"] = False;
 
                         timeDiff = int(rcv_time) - entryDict["TimePrevious2"]
                         totalByteInc = newByteCount  - entryDict["BytePrevious2"]
