@@ -46,7 +46,7 @@ import ast
 from webob import Response
 
 
-LOG = logging.getLogger('ryu.app.ryu_nf4')
+LOG = logging.getLogger('ryu.app.ryu_telelab_nf1')
 NOVI_DPID = 0x0000000000000064
 
 # TODO: configurable
@@ -67,6 +67,8 @@ def ship_points_to_influxdb(points):
 
 transferDict = {}
 reportAggDict = {}
+controllerTStat = {}
+flowTDict = {}
 react_cookie_offset = 0 
 
 app  = Flask(__name__)
@@ -76,9 +78,14 @@ CORS(app)
 def hello_world():
     global transferDict
     global reportAggDict
+    global flowTDict
+    global controllerTStat
 
     outDict = {}
     mList = [];
+    flowList = [];
+
+    #reformat data for reporting
     for ip_src in transferDict:
 
         srcDict = transferDict[ip_src]
@@ -89,37 +96,46 @@ def hello_world():
             if (entryDict["isVideo"]):
 
                 newDict = {}
-                newDict["time"] = entryDict["Time"]
+                newDict["time"] = entryDict["time"]
                 newDict["srcIp"] = ip_src
                 newDict["dstIp"] = ip_dst
-                newDict["beginTime"] = entryDict["BeginTime"]
-                newDict["duration"] =entryDict["Duration"]
-                newDict["byte"] = entryDict["Byte"]
+                newDict["beginTime"] = entryDict["beginTime"]
+                newDict["duration"] =entryDict["duration"]
+                newDict["byte"] = entryDict["byte"]
 
-                if "Endpoint" in entryDict:
-                  newDict["endpoint"] =  entryDict["Endpoint"] 
+                if "endpoint" in entryDict:
+                  newDict["endpoint"] =  entryDict["endpoint"] 
 
                 if "Mbps" in entryDict:
                   newDict["mbps"] = entryDict["Mbps"]
-                if "Quality" in entryDict:
-                  newDict["quality"]= entryDict["Quality"]
+                if "quality" in entryDict:
+                  newDict["quality"]= entryDict["quality"]
                 mList.append(newDict)
 
-        outDict["flows"] = mList;
+
+    for cookie in flowTDict:
+        flowEntry = flowTDict[cookie]
+        flowList.append(flowEntry)
 
     aggDict = {}
     aggDict["totalBytes"] = reportAggDict["Default_byte_count"] + reportAggDict["Total_NF_count"] 
     aggDict["netflixBytes"] = reportAggDict["Total_NF_count"]
-    aggDict["time"] = reportAggDict["Time"]
+    aggDict["time"] = reportAggDict["time"]
+
+    outDict["flows"] = mList;
     outDict["usage"] = aggDict
+    outDict["flowStat"] = flowList;
+    outDict["appName"] = "Telemetry Lab - NF"
+    outDict["version"] = "Ver 0.1"
+    outDict["controllerStat"] = controllerTStat
 
     return json.dumps(outDict)
 
 
-class NFReactiveController(ControllerBase):
+class TeleLabReactiveController(ControllerBase):
 
     def __init__(self, req, link, data, **config):
-        super(NFReactiveController, self).__init__(req, link, data, **config)
+        super(TeleLabReactiveController, self).__init__(req, link, data, **config)
         self.dpset = data['dpset']
         self.waiters = data['waiters']
 
@@ -205,7 +221,7 @@ ryuNFApp = 0;
 
 '''RYU stuff'''
 
-class ryu_nf4(app_manager.RyuApp):
+class ryu_telelab_nf1(app_manager.RyuApp):
 
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
@@ -215,8 +231,9 @@ class ryu_nf4(app_manager.RyuApp):
     }
 
     def __init__(self, *args, **kwargs):
-        super(ryu_nf4, self).__init__(*args, **kwargs)
+        super(ryu_telelab_nf1, self).__init__(*args, **kwargs)
         global ryuNFApp 
+        global controllerTStat
         ryuNFApp = self
         self.datapaths = {}
         self.logger.debug("Init");
@@ -225,9 +242,11 @@ class ryu_nf4(app_manager.RyuApp):
         self.usageDict = {} #raw info with port level stat
         self.calDict = {} #byte count, IP level
         self.aggreatedUsage = {}
+        self.controllerStat = {}
+        self.controllerStat["startTime"] = int(time.time());
         self.aggreatedUsage["Total_NF_count"] = 0;
         self.aggreatedUsage["Default_byte_count"] = 0;
-        self.aggreatedUsage["Time"] = 0;
+        self.aggreatedUsage["time"] = 0;
         self.aggreatedUsage["active"] = 0;
 
 
@@ -250,17 +269,17 @@ class ryu_nf4(app_manager.RyuApp):
         self.data['waiters'] = self.waiters
         mapper = wsgi.mapper
 
-        wsgi.registory['NFReactiveController'] = self.data
+        wsgi.registory['TeleLabReactiveController'] = self.data
         path = '/stats'
         uri = path + '/switches'
         mapper.connect('stats', uri,
-                       controller=NFReactiveController, action='get_dpids',
+                       controller=TeleLabReactiveController, action='get_dpids',
                        conditions=dict(method=['GET']))
 
         path = '/reacts'
         uri = path + '/add/{cmd}'
         mapper.connect('stats', uri,
-                       controller=NFReactiveController, action='add_reactive_flow',
+                       controller=TeleLabReactiveController, action='add_reactive_flow',
                        conditions=dict(method=['POST']))
 
     def _runServer(self):
@@ -437,6 +456,8 @@ class ryu_nf4(app_manager.RyuApp):
     def _flow_stats_reply_handler(self, ev):
         global transferDict
         global reportAggDict
+        global flowTDict
+        global controllerTStat
         rcv_time = time.time()
         msg = ev.msg
         body = msg.body
@@ -457,7 +478,7 @@ class ryu_nf4(app_manager.RyuApp):
             self.logger.info('cookie:%d byte_count: %d', cookie,byte_count);
 
             self.aggreatedUsage["Default_byte_count"] = byte_count
-            self.aggreatedUsage["Time"] = int(rcv_time)
+            self.aggreatedUsage["time"] = int(rcv_time)
 
 
 
@@ -477,14 +498,8 @@ class ryu_nf4(app_manager.RyuApp):
             cookie = f.cookie
             packet_count = f.packet_count
             byte_count = f.byte_count
-            
 
-            '''influx stuff'''
-            
-             #process raw info and push to Influx DB
-            #TODO: more processing
-            
-
+        
             self.logger.info('cookie:%d byte_count: %d', cookie,byte_count);
 
             ip_src = str(f.match['ipv4_src'])
@@ -525,16 +540,15 @@ class ryu_nf4(app_manager.RyuApp):
 
                 flowDict = {}
                 
-                flowDict["Time"] = int(rcv_time)
+                flowDict["time"] = int(rcv_time)
                 flowDict["cookie"] = cookie
-                flowDict["SourceIP"] = ip_src
-                flowDict["DestinationIP"] = ip_dst 
+                flowDict["sourceIP"] = ip_src
+                flowDict["destinationIP"] = ip_dst 
                 flowDict["tp_dst"] = f.match['tcp_dst']
                 flowDict["tp_src"] = f.match['tcp_src']
-                flowDict["Bytes"] = f.byte_count
-                flowDict["Duration"] = f.duration_sec
-                flowDict["RTime"] = 0
-                flowDict["RBytes"] = 0
+                flowDict["bytes"] = f.byte_count
+                flowDict["duration"] = f.duration_sec
+                flowDict["packets"] = f.packet_count
 
                 self.usageDict[cookie] = flowDict
 
@@ -542,13 +556,13 @@ class ryu_nf4(app_manager.RyuApp):
             else:
                 flowDict = self.usageDict[cookie]
 
-                byteIncrement = f.byte_count - flowDict["Bytes"]
-                timeIncrement = int(rcv_time) - flowDict["Time"]
+                byteIncrement = f.byte_count - flowDict["bytes"]
+                timeIncrement = int(rcv_time) - flowDict["time"]
 
                 if(byteIncrement < 0):
                     self.logger.info("!!! HEY its negative!");
-                    self.logger.info("Counts: %d %d",f.byte_count , flowDict["Bytes"]);
-                    self.logger.info("Time: %d %d", int(rcv_time) , flowDict["Time"]);
+                    self.logger.info("Counts: %d %d",f.byte_count , flowDict["bytes"]);
+                    self.logger.info("Time: %d %d", int(rcv_time) , flowDict["time"]);
                     self.logger.info("cookie: %d %d", cookie, f.cookie);
                     self.logger.info("port: %s %s", flowDict["tp_dst"], f.match['tcp_dst']);
                     raise ValueError('!!! HEY its negative!')
@@ -558,17 +572,11 @@ class ryu_nf4(app_manager.RyuApp):
                 #add increment to total NF counter
                 self.aggreatedUsage["Total_NF_count"] += byteIncrement;
 
-                flowDict["Time"] = int(rcv_time)
-                flowDict["Bytes"] = f.byte_count
-                flowDict["Duration"] = f.duration_sec
-                flowDict["RTime"] = 0
-                flowDict["RBytes"] = 0
+                flowDict["time"] = int(rcv_time)
+                flowDict["bytes"] = f.byte_count
+                flowDict["duration"] = f.duration_sec
+                flowDict["packets"] = f.packet_count
 
-                #avoid buffering time, mark byte count at 60s
-                if f.duration_sec > 60 and flowDict["RTime"] == 0:
-
-                    flowDict["RTime"] = f.duration_sec
-                    flowDict["RBytes"] = f.byte_count
 
                 self.usageDict[cookie] = flowDict
 
@@ -578,19 +586,21 @@ class ryu_nf4(app_manager.RyuApp):
 
                     #first seen, but 0 byte
                     if byteIncrement == 0:
+
+
                         continue
 
                     #first entry
                     entryDict = {}
-                    entryDict["Byte"] = byteIncrement;
-                    entryDict["Time"] = int(rcv_time);
-                    entryDict["BeginTime"] = int(rcv_time); # time first receive IP pairs
-                    entryDict["Duration"] = 0
+                    entryDict["byte"] = byteIncrement;
+                    entryDict["time"] = int(rcv_time);
+                    entryDict["beginTime"] = int(rcv_time); # time first receive IP pairs
+                    entryDict["duration"] = 0
                     entryDict["TimePrevious"] = int(rcv_time);
                     entryDict["BytePrevious"] = byteIncrement;
                     entryDict["TimePrevious2"] = int(rcv_time);
                     entryDict["BytePrevious2"] = byteIncrement;
-                    entryDict["Endpoint"] = endPointStr
+                    entryDict["endpoint"] = endPointStr
                     entryDict["isVideo"] = False;
 
                     dstDict = {}
@@ -608,29 +618,29 @@ class ryu_nf4(app_manager.RyuApp):
 
                         #first entry
                         entryDict = {}
-                        entryDict["Byte"] = byteIncrement;
-                        entryDict["Time"] = int(rcv_time);
-                        entryDict["BeginTime"] = int(rcv_time); # time first receive IP pairs
-                        entryDict["Duration"] = 0
+                        entryDict["byte"] = byteIncrement;
+                        entryDict["time"] = int(rcv_time);
+                        entryDict["beginTime"] = int(rcv_time); # time first receive IP pairs
+                        entryDict["duration"] = 0
                         entryDict["TimePrevious"] = int(rcv_time);
                         entryDict["BytePrevious"] = byteIncrement;
                         entryDict["TimePrevious2"] = int(rcv_time);
                         entryDict["BytePrevious2"] = byteIncrement;
-                        entryDict["Endpoint"] = endPointStr
+                        entryDict["endpoint"] = endPointStr
                         entryDict["isVideo"] = False;
                         dstDict[ip_dst] = entryDict
 
                     else:
 
                         entryDict = dstDict[ip_dst]
-                        newByteCount = entryDict["Byte"] + byteIncrement;
+                        newByteCount = entryDict["byte"] + byteIncrement;
 
-                        entryDict["Byte"] = newByteCount 
-                        entryDict["Time"] = int(rcv_time);
-                        entryDict["Duration"] = int(rcv_time) - entryDict["BeginTime"];
+                        entryDict["byte"] = newByteCount 
+                        entryDict["time"] = int(rcv_time);
+                        entryDict["duration"] = int(rcv_time) - entryDict["beginTime"];
 
-                        if entryDict["Duration"] > 5:
-                            flowMbps = float(entryDict["Byte"]) * 8 / (entryDict["Duration"]  * 1024 * 1024);
+                        if entryDict["duration"] > 5:
+                            flowMbps = float(entryDict["byte"]) * 8 / (entryDict["duration"]  * 1024 * 1024);
                             if (flowMbps > 0.5):
                                 entryDict["isVideo"] = True;
                             elif (flowMbps < 0.2):
@@ -645,7 +655,7 @@ class ryu_nf4(app_manager.RyuApp):
                             entryDict["TimePrevious2"] = int(rcv_time);
                             entryDict["BytePrevious2"] = newByteCount;
 
-                            if entryDict["Duration"] > 60:
+                            if entryDict["duration"] > 60:
 
                                 Mbps = float(totalByteInc) * 8 / (timeDiff  * 1024 * 1024)
                                 
@@ -663,16 +673,16 @@ class ryu_nf4(app_manager.RyuApp):
                                     QualityStr = "???"
                                 elif Mbps > 15:
                                     QualityStr = "UHD"
-                                    entryDict["Quality"] = QualityStr
+                                    entryDict["quality"] = QualityStr
                                 elif Mbps > 4:
                                     QualityStr = "HD"
-                                    entryDict["Quality"] = QualityStr
+                                    entryDict["quality"] = QualityStr
                                 elif Mbps > 1:
                                     QualityStr = "SD"
-                                    entryDict["Quality"] = QualityStr
+                                    entryDict["quality"] = QualityStr
                                 elif Mbps > 0.5:
                                     QualityStr = "LOW"
-                                    entryDict["Quality"] = QualityStr
+                                    entryDict["quality"] = QualityStr
                                 else:
                                     pass
 
@@ -695,13 +705,39 @@ class ryu_nf4(app_manager.RyuApp):
                                 del dstDict[ip_dst]
                                 self.calDict[ip_src] = dstDict
 
+        
+        '''
+        for ip_src in self.calDict:
+            srcDict = self.calDict[ip_src]
+            for ip_dst in srcDict:
+                entryDict = srcDict[ip_dst]
+                #if no update from switch more than 3 sec. 
+                if int(rcv_time) - entryDict["time"] > 15:
+                    del self.calDict[ip_src][ip_dst]
+        '''
+
+        
+        flowToDelete = []
+        for cookie in self.usageDict:
+            #if no update from switch more than 5 sec. 
+            if int(rcv_time) - self.usageDict[cookie]["time"] > 5:
+                flowToDelete.append(cookie)
+
+        for cookie in flowToDelete:
+            del self.usageDict[cookie]
+
 
         if points:
             ship_points_to_influxdb(points)
 
+        self.controllerStat["uptime"] = int(rcv_time)- self.controllerStat["startTime"] 
+
         #ship_points_to_influxdb(testPoints)
         transferDict = self.calDict
         reportAggDict = self.aggreatedUsage
+        controllerTStat = self.controllerStat
+        flowTDict=  self.usageDict
+
 
 
 
