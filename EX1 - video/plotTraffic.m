@@ -1,4 +1,4 @@
-u
+
 res = 1;
 max = dTime(end,1);
 count = zeros(round(max/res)+1,1);

@@ -1,6 +1,8 @@
 
-[Time,DesIP,DesPort,SrcIP,SrcPort,Len] = mLoadTrace('Netflix_trace',1, 37262);
-%[Time,DesIP,DesPort,SrcIP,SrcPort,Len] = mLoadTrace('Youtube_trace',1, 48070);
+
+
+%[Time,DesIP,DesPort,SrcIP,SrcPort,Len] = mLoadTrace('Netflix_trace',1, 37262);
+[Time,DesIP,DesPort,SrcIP,SrcPort,Len] = mLoadTrace('Youtube_trace',1, 48070);
 
 dTime = zeros(length(Time),2);
 iniTime = 0;
@@ -17,6 +19,8 @@ for i = 2:length(Time)
     rounded = round(seconds - iniTime,6);
     dTime(i,:)  = [rounded,Len(i)];
 end
+
+
 
 
 
