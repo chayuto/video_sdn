@@ -123,7 +123,7 @@ def hello_world():
         flowList.append(flowEntry)
 
     #sorting 
-    flowList = sorted(flowList, key=lambda k: k["bytes"],reverse=True) ;
+    flowList = sorted(flowList, key=lambda k: k["byte"],reverse=True) ;
 
     aggDict = {}
     aggDict["totalBytes"] = reportAggDict["Default_byte_count"] + \
@@ -629,7 +629,7 @@ class ryu_telelab_2(app_manager.RyuApp):
                 flowDict["destinationIP"] = ip_dst 
                 flowDict["tp_dst"] = f.match['tcp_dst']
                 flowDict["tp_src"] = f.match['tcp_src']
-                flowDict["bytes"] = f.byte_count
+                flowDict["byte"] = f.byte_count
                 flowDict["duration"] = f.duration_sec
                 flowDict["packets"] = f.packet_count
 
@@ -647,12 +647,12 @@ class ryu_telelab_2(app_manager.RyuApp):
             else:
                 flowDict = self.usageDict[cookie]
 
-                byteIncrement = f.byte_count - flowDict["bytes"]
+                byteIncrement = f.byte_count - flowDict["byte"]
                 timeIncrement = int(rcv_time) - flowDict["time"]
 
                 if(byteIncrement < 0):
                     self.logger.info("!!! HEY its negative!");
-                    self.logger.info("Counts: %d %d",f.byte_count , flowDict["bytes"]);
+                    self.logger.info("Counts: %d %d",f.byte_count , flowDict["byte"]);
                     self.logger.info("Time: %d %d", int(rcv_time) , flowDict["time"]);
                     self.logger.info("cookie: %d %d", cookie, f.cookie);
                     self.logger.info("port: %s %s", flowDict["tp_dst"], f.match['tcp_dst']);
@@ -669,7 +669,7 @@ class ryu_telelab_2(app_manager.RyuApp):
                     self.aggreatedUsage["totalOtherCount"] += byteIncrement;
 
                 flowDict["time"] = int(rcv_time)
-                flowDict["bytes"] = f.byte_count
+                flowDict["byte"] = f.byte_count
                 flowDict["duration"] = f.duration_sec
                 flowDict["packets"] = f.packet_count
 
