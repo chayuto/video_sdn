@@ -114,10 +114,16 @@ def hello_world():
                   newDict["quality"]= entryDict["quality"]
                 mList.append(newDict)
 
+    #sorting 
+    mList = sorted(mList, key=lambda k: k["byte"],reverse=True) 
+
 
     for cookie in flowTDict:
         flowEntry = flowTDict[cookie]
         flowList.append(flowEntry)
+
+    #sorting 
+    flowList = sorted(flowList, key=lambda k: k["bytes"],reverse=True) ;
 
     aggDict = {}
     aggDict["totalBytes"] = reportAggDict["Default_byte_count"] + \
