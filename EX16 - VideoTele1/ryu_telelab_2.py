@@ -126,20 +126,23 @@ def hello_world():
     flowList = sorted(flowList, key=lambda k: k["byte"],reverse=True) ;
 
     aggDict = {}
-    aggDict["totalBytes"] = reportAggDict["Default_byte_count"] + \
-        reportAggDict["Total_NF_count"] + \
-        reportAggDict["totalOtherCount"] + \
+    aggDict["totalBytes"] = reportAggDict["defaultCount"] + \
+        reportAggDict["netflixCount"] + \
+        reportAggDict["otherCount"] + \
+        reportAggDict["mirroredCount"] + \
         reportAggDict["googleCount"]
-    aggDict["netflixBytes"] = reportAggDict["Total_NF_count"]
+    aggDict["netflixBytes"] = reportAggDict["netflixCount"]
     aggDict["googleBytes"] = reportAggDict["googleCount"]
-    aggDict["otherBytes"] = reportAggDict["totalOtherCount"]
+    aggDict["otherBytes"] = reportAggDict["otherCount"]
+    aggDict["mirroredBytes"] = reportAggDict["mirroredCount"]
     aggDict["time"] = reportAggDict["time"]
 
     outDict["flows"] = mList;
     outDict["usage"] = aggDict
     outDict["stats"] = flowList;
-    outDict["appName"] = "Telemetry Lab : NF + YT"
-    outDict["version"] = "Ver 0.2"
+    outDict["appName"] = "Telemetry Lab : Viometry"
+    outDict["version"] = "Ver 0.3"
+    outDict["releaseDate"] = "20160524"
     outDict["controllerStat"] = controllerTStat
 
     return json.dumps(outDict)
@@ -256,14 +259,16 @@ class ryu_telelab_2(app_manager.RyuApp):
 
         #our internal record fpr stat
         self.usageDict = {} #raw info with port level stat
+        self.proactiveDict = {}
         self.calDict = {} #byte count, IP level
         self.aggreatedUsage = {}
         self.controllerStat = {}
         self.controllerStat["startTime"] = int(time.time());
-        self.aggreatedUsage["Total_NF_count"] = 0;
-        self.aggreatedUsage["totalOtherCount"] = 0;
+        self.aggreatedUsage["netflixCount"] = 0;
+        self.aggreatedUsage["otherCount"] = 0;
         self.aggreatedUsage["googleCount"] = 0
-        self.aggreatedUsage["Default_byte_count"] = 0;
+        self.aggreatedUsage["mirroredCount"] = 0
+        self.aggreatedUsage["defaultCount"] = 0;
         self.aggreatedUsage["time"] = 0;
         self.aggreatedUsage["active"] = 0;
 
@@ -295,7 +300,9 @@ class ryu_telelab_2(app_manager.RyuApp):
 
         self.flask_thread= hub.spawn(self._runServer)
         self.monitor_thread = hub.spawn(self._monitor)
-        self.flowKeepAliveTread = hub.spawn(self._flowKeepAlive)
+
+        #TCP mirror all
+        #self.flowKeepAliveTread = hub.spawn(self._flowKeepAlive)
 
         self.dpset = kwargs['dpset']
         wsgi = kwargs['wsgi']
@@ -337,7 +344,7 @@ class ryu_telelab_2(app_manager.RyuApp):
             #self.bc.processInput();
             self.logger.debug("_flowKeepAlive");
             for dp in self.datapaths.values():
-                dp.send_msg(self.google_flow_mod(dp))
+                dp.send_msg(self.tcp_flow_mod(dp))
             hub.sleep(60)
 
 
@@ -388,14 +395,13 @@ class ryu_telelab_2(app_manager.RyuApp):
         #default flows
         self.default_flows_initiation(datapath)
 
-    
-        #proactive rules
-        netflix_src_list = tuple(open('./Netflix_AS2906', 'r'))
-        
 
         cookie_offset = 0
+
+        netflix_src_list = tuple(open('./Netflix_AS2906', 'r'))
+
+
         for netflix_srcc in netflix_src_list:
-            # self.logger.info("initiating and inserting netflix src flow entry: %s", netflix_srcc)
             netflix_src=netflix_srcc.strip()
 
             flowmods = self.netflix_flows_mod(datapath, netflix_src,cookie_offset)
@@ -403,9 +409,20 @@ class ryu_telelab_2(app_manager.RyuApp):
             # self.logger.info("after creating flowmods")
             datapath.send_msg(flowmods)
 
+        google_src_list = tuple(open('./Google_AS15169', 'r'))
 
+        for google_srcc in google_src_list:
+            google_src=google_srcc.strip()
+
+            flowmods = self.google_flows_mod(datapath,google_src,cookie_offset)
+            cookie_offset +=1
+            datapath.send_msg(flowmods)
         
-        
+        #AARNET
+        flowmods = self.google_flows_mod(datapath,"203.5.76.205/24",cookie_offset)
+        cookie_offset +=1
+        datapath.send_msg(flowmods)
+
 
 
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
@@ -497,8 +514,45 @@ class ryu_telelab_2(app_manager.RyuApp):
                                 flags=ofp.OFPFF_SEND_FLOW_REM)
         return mod
 
+    def google_flows_mod(self,dp, google_src,cookie_offset):
+        datapath = dp
 
-    def google_flow_mod(self,dp):
+        parser = datapath.ofproto_parser
+
+        src_ip = google_src
+        part=src_ip.split("/")
+        ip=part[0]
+        self.logger.info(ip)
+
+        mask="255.255.255.0"
+
+        match = parser.OFPMatch(in_port=self.gatewayPort,ipv4_src=(ip,mask)) #eth_type = 0x0800,
+        # self.logger.info("after ofpmatch")
+        priority = 10000
+
+        # TODO change instruction 
+
+        action1 = parser.OFPActionOutput(self.clientPort);
+        action2 = parser.OFPActionOutput(self.mirrorPort);
+        actionController = parser.OFPActionOutput(ofp.OFPP_CONTROLLER);
+        actions = [action1,action2 ] #
+        #actions = [action1 ] #
+        # self.logger.info("after actions")
+        # self.logger.info("dp: %s, srcIp: %s match: %s priority: %s actions: %s", datapath, src_ip, match, priority, actions)
+        
+        inst = [parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
+                                             actions)]
+        # self.logger.info("after inst")
+        
+        mod = parser.OFPFlowMod(datapath=datapath, cookie=(0x3309 + cookie_offset),
+                                priority=priority, table_id = 0, 
+                                match=match, command=ofp.OFPFC_ADD, instructions=inst, hard_timeout=0,
+                                idle_timeout=0,
+                                flags=ofp.OFPFF_SEND_FLOW_REM)
+        return mod
+
+
+    def tcp_flow_mod(self,dp):
 
         datapath = dp
 
@@ -531,9 +585,8 @@ class ryu_telelab_2(app_manager.RyuApp):
                                 flags=ofp.OFPFF_SEND_FLOW_REM)
         return mod
 
+
     ''' checking '''
-
-
     def isNetflixIP(self,ip_src):
 
         for network in self.nfNetworkList:
@@ -571,10 +624,10 @@ class ryu_telelab_2(app_manager.RyuApp):
         self.logger.info("Flow Stat received");
 
         
-        fTable2 = [flow for flow in body if (flow.cookie == 0x44 and flow.priority == 100)];
-        self.logger.info("Size2: " +str(len(fTable2)));
+        fTable1 = [flow for flow in body if (flow.cookie == 0x44 and flow.priority == 100)];
+        self.logger.info("Mod1: " +str(len(fTable1)));
 
-        for f in fTable2:
+        for f in fTable1:
             dpid  = msg.datapath.id
             cookie = f.cookie
             packet_count = f.packet_count
@@ -582,23 +635,53 @@ class ryu_telelab_2(app_manager.RyuApp):
 
             self.logger.info('cookie:%d byte_count: %d', cookie,byte_count);
 
-            self.aggreatedUsage["Default_byte_count"] = byte_count
+            self.aggreatedUsage["defaultCount"] = byte_count
             self.aggreatedUsage["time"] = int(rcv_time)
 
 
+        fTable2 = [flow for flow in body if (flow.priority == 10000 and flow.table_id == 0)];
+        self.logger.info("Mod2: " +str(len(fTable2)));
 
-        fTable = [flow for flow in body if (flow.priority == 20000 
+        for f in fTable2:
+            dpid  = msg.datapath.id
+            cookie = f.cookie
+            packet_count = f.packet_count
+            byte_count = f.byte_count
+
+            if byte_count > 0:
+                self.logger.info('cookie:%d byte_count: %d', cookie,byte_count);
+
+            flowDict = {}
+        
+            flowDict["time"] = int(rcv_time)
+            flowDict["cookie"] = cookie
+            flowDict["byte"] = f.byte_count
+            flowDict["duration"] = f.duration_sec
+            flowDict["packets"] = f.packet_count
+
+            self.proactiveDict[cookie] = flowDict
+
+            sumByte = 0
+
+            for cookie in self.proactiveDict:
+                sumByte += self.proactiveDict[cookie]["byte"]
+
+            self.aggreatedUsage["mirroredCount"] = sumByte;
+
+
+
+        fTable3 = [flow for flow in body if (flow.priority == 20000 
                                             and flow.table_id == 0 
                                             and flow.byte_count > 0)]; #and flow.byte_count > 0
          #and flow.byte_count > 0
 
-        self.logger.info("Size1: " +str(len(fTable)));
+        self.logger.info("Mod3: " +str(len(fTable3)));
 
 
         points = [] #for influx 
 
         #[flow for flow in body if (flow.priority == 20000 and flow.table_id == 0)]
-        for f in fTable:
+        for f in fTable3:
             #for f in [flow for flow in body]:
 
             dpid  = msg.datapath.id
@@ -635,9 +718,11 @@ class ryu_telelab_2(app_manager.RyuApp):
 
                 #classify flow at first seen
                 if(self.isNetflixIP(ip_src)):
-                    flowDict["tag"] = "NF"
+                    flowDict["tag"] = "netflix"
+                    self.aggreatedUsage["netflixCount"] += f.byte_count;
                 elif(self.isGoogleIP(ip_src)):
                     flowDict["tag"] = "google";
+                    self.aggreatedUsage["googleCount"] += f.byte_count;
                 else:
                     flowDict["tag"] = "other";
 
@@ -661,12 +746,12 @@ class ryu_telelab_2(app_manager.RyuApp):
                     continue;
 
                 #add increment to total NF counter
-                if(flowDict["tag"] == "NF"):
-                    self.aggreatedUsage["Total_NF_count"] += byteIncrement;
+                if(flowDict["tag"] == "netflix"):
+                    self.aggreatedUsage["netflixCount"] += byteIncrement;
                 elif(flowDict["tag"] == "google"):
                     self.aggreatedUsage["googleCount"] += byteIncrement;
                 else:
-                    self.aggreatedUsage["totalOtherCount"] += byteIncrement;
+                    self.aggreatedUsage["otherCount"] += byteIncrement;
 
                 flowDict["time"] = int(rcv_time)
                 flowDict["byte"] = f.byte_count
