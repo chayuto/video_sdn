@@ -115,7 +115,7 @@ def hello_world():
                 mList.append(newDict)
 
     #sorting 
-    mList = sorted(mList, key=lambda k: k["byte"],reverse=True) 
+    mList = sorted(mList, key=lambda k: k["beginTime"],reverse=True) 
 
 
     for cookie in flowTDict:
@@ -123,7 +123,7 @@ def hello_world():
         flowList.append(flowEntry)
 
     #sorting 
-    flowList = sorted(flowList, key=lambda k: k["byte"],reverse=True) ;
+    flowList = sorted(flowList, key=lambda k: k["time"],reverse=True) ;
 
     aggDict = {}
     aggDict["totalBytes"] = reportAggDict["defaultCount"] + \
@@ -140,9 +140,7 @@ def hello_world():
     outDict["flows"] = mList;
     outDict["usage"] = aggDict
     outDict["stats"] = flowList;
-    outDict["appName"] = "Telemetry Lab : Viometry"
-    outDict["version"] = "Ver 0.3"
-    outDict["releaseDate"] = "20160524"
+    
     outDict["controllerStat"] = controllerTStat
 
     return json.dumps(outDict)
@@ -264,6 +262,9 @@ class ryu_telelab_2(app_manager.RyuApp):
         self.aggreatedUsage = {}
         self.controllerStat = {}
         self.controllerStat["startTime"] = int(time.time());
+        self.controllerStat["appName"] = "Telemetry Lab : TeleScope"
+        self.controllerStat["version"] = "Ver 0.3"
+        self.controllerStat["releaseDate"] = "20160525"
         self.aggreatedUsage["netflixCount"] = 0;
         self.aggreatedUsage["otherCount"] = 0;
         self.aggreatedUsage["googleCount"] = 0
@@ -826,7 +827,7 @@ class ryu_telelab_2(app_manager.RyuApp):
                             flowMbps = float(entryDict["byte"]) * 8 / (entryDict["duration"]  * 1024 * 1024);
                             if (flowMbps > 0.5):
                                 entryDict["isVideo"] = True;
-                            elif (flowMbps < 0.2):
+                            elif (flowMbps < 0.3):
                                 entryDict["isVideo"] = False;
 
                         timeDiff = int(rcv_time) - entryDict["TimePrevious2"]
@@ -840,18 +841,15 @@ class ryu_telelab_2(app_manager.RyuApp):
 
                             if entryDict["duration"] > 60:
 
-                                Mbps = float(totalByteInc) * 8 / (timeDiff  * 1024 * 1024)
-                                
                                 #entryDict["Mbps"] = Mbps
 
+                                Mbps = float(totalByteInc) * 8 / (timeDiff  * 1024 * 1024)
                                 
                                 if "Mbps" in entryDict:
                                     entryDict["Mbps"] = Mbps * (0.7) + entryDict["Mbps"] * (0.3)
                                 else:
                                     entryDict["Mbps"] = Mbps
                                 
-
-                                QualityStr = "???"
                                 if Mbps > 30:
                                     QualityStr = "???"
                                 elif Mbps > 15:
