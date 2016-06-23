@@ -1,18 +1,3 @@
-# Copyright (C) 2011 Nippon Telegraph and Telephone Corporation.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-# implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 
 from ryu.base import app_manager
 from ryu.controller import dpset
@@ -49,7 +34,7 @@ from webob import Response
 LOG = logging.getLogger('ryu.app.ryu_telelab_2')
 NOVI_DPID = 0x0000000000000064
 
-# TODO: configurable
+# TODO: configurable DB
 INFLUXDB_DB = "flowBucket"
 INFLUXDB_HOST = "129.94.5.44"
 INFLUXDB_PORT = 8086
@@ -128,11 +113,15 @@ def hello_world():
     aggDict = {}
     aggDict["totalBytes"] = reportAggDict["defaultCount"] + \
         reportAggDict["netflixCount"] + \
+        reportAggDict["facebookCount"] + \
+        reportAggDict["iviewCount"] + \
         reportAggDict["otherCount"] + \
         reportAggDict["mirroredCount"] + \
         reportAggDict["googleCount"]
     aggDict["netflixBytes"] = reportAggDict["netflixCount"]
     aggDict["googleBytes"] = reportAggDict["googleCount"]
+    aggDict["facebookBytes"] = reportAggDict["facebookCount"]
+    aggDict["iViewBytes"] = reportAggDict["iviewCount"]
     aggDict["otherBytes"] = reportAggDict["otherCount"]
     aggDict["mirroredBytes"] = reportAggDict["mirroredCount"]
     aggDict["time"] = reportAggDict["time"]
@@ -153,11 +142,7 @@ class TeleLabReactiveController(ControllerBase):
         self.dpset = data['dpset']
         self.waiters = data['waiters']
 
-        self.gatewayPort = 24 #pica 8
-        self.clientPort = 26 #uniwideSDN
-        self.mirrorPort = 22
-
-
+        self.gatewayPore
 
     def get_dpids(self, req, **_kwargs):
         LOG.debug('get_dpids')
@@ -168,27 +153,18 @@ class TeleLabReactiveController(ControllerBase):
     def netfilx_reactive_flow_mod(self,dp,srcIP,dstIP,src_port,dst_port):
 
         global react_cookie_offset
+
         match = parser.OFPMatch(ipv4_src=srcIP,ipv4_dst=dstIP,
             in_port=self.gatewayPort,tcp_src = src_port, tcp_dst = dst_port)
-        # self.logger.info("after ofpmatch")
         priority = 20000
         idle_timeout = 60
-
-        # TODO change instruction 
-
         action1 = parser.OFPActionOutput(self.clientPort);
-        actionController = parser.OFPActionOutput(ofp.OFPP_CONTROLLER);
         actions = [action1]
-        # self.logger.info("after actions")
-        # self.logger.info("dp: %s, srcIp: %s match: %s priority: %s actions: %s", datapath, src_ip, match, priority, actions)
-        
-        inst = [parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
-                                             actions)]
-        # self.logger.info("after inst")
+        inst = [parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,actions)]
         
         mod = parser.OFPFlowMod(datapath=dp, cookie= (0x47470000 + int((time.time())*100000)),
                                 priority=priority, table_id = 0, 
-                                match=match, command=ofp.OFPFC_ADD, instructions=inst, hard_timeout=0,
+                                match=match, command=ofp.OFPFC_ADD,instructions=inst, hard_timeout=0,
                                 idle_timeout=idle_timeout,
                                 flags=ofp.OFPFF_SEND_FLOW_REM)
 
@@ -263,11 +239,13 @@ class ryu_telelab_2(app_manager.RyuApp):
         self.controllerStat = {}
         self.controllerStat["startTime"] = int(time.time());
         self.controllerStat["appName"] = "Telemetry Lab : TeleScope"
-        self.controllerStat["version"] = "Ver 0.3"
-        self.controllerStat["releaseDate"] = "20160525"
+        self.controllerStat["version"] = "Ver 0.4"
+        self.controllerStat["releaseDate"] = "20160622"
         self.aggreatedUsage["netflixCount"] = 0;
         self.aggreatedUsage["otherCount"] = 0;
         self.aggreatedUsage["googleCount"] = 0
+        self.aggreatedUsage["facebookCount"] = 0
+        self.aggreatedUsage["iviewCount"] = 0
         self.aggreatedUsage["mirroredCount"] = 0
         self.aggreatedUsage["defaultCount"] = 0;
         self.aggreatedUsage["time"] = 0;
@@ -277,6 +255,8 @@ class ryu_telelab_2(app_manager.RyuApp):
         self.nfNetworkList = []
         self.googleNetworkList = []
         self.AARNetworkList = []
+        self.iViewNetworkList = []
+        self.facebookNetworkList = []
 
         servListRAW = tuple(open('./Netflix_AS2906', 'r'))
         for i in servListRAW:
@@ -287,6 +267,16 @@ class ryu_telelab_2(app_manager.RyuApp):
         for i in servListRAW:
             #servList.append(i.strip()) #remove \n character at the end of the line
             self.googleNetworkList.append(IPNetwork(i.strip()))
+
+        servListRAW = tuple(open('./Facebook', 'r'))
+        for i in servListRAW:
+            #servList.append(i.strip()) #remove \n character at the end of the line
+            self.facebookNetworkList.append(IPNetwork(i.strip()))
+
+        servListRAW = tuple(open('./IView', 'r'))
+        for i in servListRAW:
+            #servList.append(i.strip()) #remove \n character at the end of the line
+            self.iViewNetworkList.append(IPNetwork(i.strip()))
 
         self.AARNetworkList.append(IPNetwork("203.5.76.205/24"))
 
@@ -357,8 +347,10 @@ class ryu_telelab_2(app_manager.RyuApp):
         req = parser.OFPFlowStatsRequest(datapath)
         datapath.send_msg(req)
 
+
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
+
     def _state_change_handler(self, ev):
         datapath = ev.datapath
         if ev.state == MAIN_DISPATCHER:
@@ -400,32 +392,43 @@ class ryu_telelab_2(app_manager.RyuApp):
         cookie_offset = 0
 
         netflix_src_list = tuple(open('./Netflix_AS2906', 'r'))
-
-
         for netflix_srcc in netflix_src_list:
             netflix_src=netflix_srcc.strip()
 
-            flowmods = self.netflix_flows_mod(datapath, netflix_src,cookie_offset)
+            flowmods = self.classB_flows_mod(datapath, netflix_src,cookie_offset)
             cookie_offset +=1
             # self.logger.info("after creating flowmods")
             datapath.send_msg(flowmods)
 
         google_src_list = tuple(open('./Google_AS15169', 'r'))
-
         for google_srcc in google_src_list:
             google_src=google_srcc.strip()
 
-            flowmods = self.google_flows_mod(datapath,google_src,cookie_offset)
+            flowmods = self.classB_flows_mod(datapath,google_src,cookie_offset)
             cookie_offset +=1
             datapath.send_msg(flowmods)
         
         #AARNET
-        flowmods = self.google_flows_mod(datapath,"203.5.76.205/24",cookie_offset)
+        flowmods = self.classB_flows_mod(datapath,"203.5.76.205/24",cookie_offset)
         cookie_offset +=1
         datapath.send_msg(flowmods)
 
+        src_list = tuple(open('./Facebook', 'r'))
+        for srcc in src_list:
+            src=srcc.strip()
+            flowmods = self.classB_flows_mod(datapath,src,cookie_offset)
+            cookie_offset +=1
+            datapath.send_msg(flowmods)
 
+        src_list = tuple(open('./IView', 'r'))
+        for srcc in src_list:
+            src=srcc.strip()
+            flowmods = self.classB_flows_mod(datapath,src,cookie_offset)
+            cookie_offset +=1
+            datapath.send_msg(flowmods)
 
+        
+    
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -480,7 +483,6 @@ class ryu_telelab_2(app_manager.RyuApp):
 
     def netflix_flows_mod(self,dp, netflix_src,cookie_offset):
         datapath = dp
-
         parser = datapath.ofproto_parser
 
         src_ip = netflix_src
@@ -490,32 +492,26 @@ class ryu_telelab_2(app_manager.RyuApp):
 
         mask="255.255.255.0"
 
-        match = parser.OFPMatch(in_port=self.gatewayPort,ipv4_src=(ip,mask)) #eth_type = 0x0800,
-        # self.logger.info("after ofpmatch")
+        match = parser.OFPMatch(in_port=self.gatewayPort,ipv4_src=(ip,mask)) 
+     
         priority = 10000
-
-        # TODO change instruction 
 
         action1 = parser.OFPActionOutput(self.clientPort);
         action2 = parser.OFPActionOutput(self.mirrorPort);
-        actionController = parser.OFPActionOutput(ofp.OFPP_CONTROLLER);
         actions = [action1,action2 ] #
-        #actions = [action1 ] #
-        # self.logger.info("after actions")
-        # self.logger.info("dp: %s, srcIp: %s match: %s priority: %s actions: %s", datapath, src_ip, match, priority, actions)
         
         inst = [parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
                                              actions)]
-        # self.logger.info("after inst")
         
         mod = parser.OFPFlowMod(datapath=datapath, cookie=(0x3309 + cookie_offset),
                                 priority=priority, table_id = 0, 
-                                match=match, command=ofp.OFPFC_ADD, instructions=inst, hard_timeout=0,
+                                match=match, command=ofp.OFPFC_ADD, instructions=inst,
+                                hard_timeout=0,
                                 idle_timeout=0,
                                 flags=ofp.OFPFF_SEND_FLOW_REM)
         return mod
 
-    def google_flows_mod(self,dp, google_src,cookie_offset):
+    def classB_flows_mod(self,dp, google_src,cookie_offset):
         datapath = dp
 
         parser = datapath.ofproto_parser
@@ -606,11 +602,20 @@ class ryu_telelab_2(app_manager.RyuApp):
 
         return False
 
+    def isIviewIP(self,ip_src):
+        for network in self.iViewNetworkList:
+            if IPAddress(ip_src) in network:
+                return True
+        return False
 
+    def isFacebookIP(self,ip_src):
+        for network in self.facebookNetworkList:
+            if IPAddress(ip_src) in network:
+                return True
+        return False
 
 
     ''' stat event handler'''
-
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
         global transferDict
@@ -620,7 +625,6 @@ class ryu_telelab_2(app_manager.RyuApp):
         rcv_time = time.time()
         msg = ev.msg
         body = msg.body
-
 
         self.logger.info("Flow Stat received");
 
@@ -724,6 +728,13 @@ class ryu_telelab_2(app_manager.RyuApp):
                 elif(self.isGoogleIP(ip_src)):
                     flowDict["tag"] = "google";
                     self.aggreatedUsage["googleCount"] += f.byte_count;
+                elif(self.isFacebookIP (ip_src)):
+                    flowDict["tag"] = "facebook";
+                    self.aggreatedUsage["facebookCount"] += f.byte_count;
+                elif(self.isIviewIP (ip_src)):
+                    flowDict["tag"] = "iView";
+                    self.aggreatedUsage["iviewCount"] += f.byte_count;
+
                 else:
                     flowDict["tag"] = "other";
 
@@ -751,6 +762,10 @@ class ryu_telelab_2(app_manager.RyuApp):
                     self.aggreatedUsage["netflixCount"] += byteIncrement;
                 elif(flowDict["tag"] == "google"):
                     self.aggreatedUsage["googleCount"] += byteIncrement;
+                elif(flowDict["tag"] == "facebook"):
+                    self.aggreatedUsage["facebookCount"] += byteIncrement;
+                elif(flowDict["tag"] == "iView"):
+                    self.aggreatedUsage["iviewCount"] += byteIncrement;
                 else:
                     self.aggreatedUsage["otherCount"] += byteIncrement;
 
